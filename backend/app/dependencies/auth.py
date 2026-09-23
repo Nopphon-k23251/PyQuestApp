@@ -28,6 +28,20 @@ def get_current_user_optional(
         if not uid:
             return None
         user = db.query(User).filter(User.firebase_uid == uid, User.is_active == True).first()
+        if not user:
+            email = token_data.get("email", "")
+            if email:
+                user = db.query(User).filter(User.email == email, User.is_active == True).first()
+        if not user:
+            from app.services.auth_service import AuthService
+            email = token_data.get("email", "")
+            username = token_data.get("username") or (email.split("@")[0] if email else f"user_{uid[:8]}")
+            auth_service = AuthService(db)
+            user = auth_service.sync_user(
+                firebase_uid=uid,
+                email=email,
+                username=username,
+            )
         return user
     except Exception:
         return None
@@ -59,9 +73,19 @@ def get_current_user(
 
     user = db.query(User).filter(User.firebase_uid == uid).first()
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "USER_NOT_FOUND", "message": "User account not synced with database. Please sync user first."},
+        email = token_data.get("email", "")
+        if email:
+            user = db.query(User).filter(User.email == email).first()
+
+    if not user:
+        from app.services.auth_service import AuthService
+        email = token_data.get("email", "")
+        username = token_data.get("username") or (email.split("@")[0] if email else f"user_{uid[:8]}")
+        auth_service = AuthService(db)
+        user = auth_service.sync_user(
+            firebase_uid=uid,
+            email=email,
+            username=username,
         )
 
     if not user.is_active:
