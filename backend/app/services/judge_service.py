@@ -60,12 +60,28 @@ class SubprocessSandbox:
     ) -> ExecutionResult:
         """
         Executes Python code in an isolated local subprocess with:
+        - Static pre-compilation check for SyntaxError / IndentationError
         - Clean environment (scrubbed of host secrets & DB credentials)
         - Python isolated mode (-I -s)
         - Isolated temp folder
         - Enforced timeout limit
         - Output size capping
         """
+        # 1. Pre-compilation check to accurately identify SyntaxError / IndentationError
+        try:
+            compile(code, "solution.py", "exec")
+        except SyntaxError as e:
+            import traceback
+            tb = traceback.format_exception_only(type(e), e)
+            stderr_formatted = "".join(tb).strip()
+            return ExecutionResult(
+                status=SubmissionStatus.SYNTAX_ERROR,
+                stdout="",
+                stderr=stderr_formatted,
+                execution_time_ms=0,
+                error_code="SYNTAX_ERROR",
+            )
+
         timeout_seconds = max(0.5, timeout_ms / 1000.0)
         # Ensure input data ends with newline so Python's input() does not hang
         if input_data and not input_data.endswith("\n"):
@@ -110,13 +126,29 @@ class SubprocessSandbox:
 
                 if proc.returncode != 0:
                     # Sanitize paths in stderr for security
-                    sanitized_stderr = stderr.replace(script_path, "solution.py").replace(temp_dir, "")
+                    sanitized_stderr = stderr.replace(script_path, "solution.py").replace(temp_dir, "").strip()
+
+                    # Extract specific Python exception name from the last non-empty line of traceback
+                    err_lines = [line.strip() for line in sanitized_stderr.split("\n") if line.strip()]
+                    error_type = "RUNTIME_ERROR"
+                    if err_lines:
+                        last_line = err_lines[-1]
+                        if ":" in last_line:
+                            candidate = last_line.split(":", 1)[0].strip()
+                            if " " not in candidate and (candidate.isidentifier() or candidate.endswith("Error") or candidate.endswith("Exception")):
+                                error_type = candidate
+                        elif last_line.isidentifier():
+                            error_type = last_line
+
+                    # If the exception is a SyntaxError or IndentationError (e.g. from dynamic eval/exec)
+                    is_syntax = error_type in ("SyntaxError", "IndentationError", "TabError") or "SyntaxError:" in sanitized_stderr or "IndentationError:" in sanitized_stderr
+
                     return ExecutionResult(
-                        status=SubmissionStatus.RUNTIME_ERROR,
+                        status=SubmissionStatus.SYNTAX_ERROR if is_syntax else SubmissionStatus.RUNTIME_ERROR,
                         stdout=stdout,
-                        stderr=sanitized_stderr.strip(),
+                        stderr=sanitized_stderr,
                         execution_time_ms=duration_ms,
-                        error_code="RUNTIME_ERROR",
+                        error_code="SYNTAX_ERROR" if is_syntax else error_type,
                     )
 
                 return ExecutionResult(
@@ -206,6 +238,7 @@ class JudgeService:
         final_status = SubmissionStatus.ACCEPTED
         max_exec_time = 0
         failed_error_code = None
+        failed_stderr = None
 
         for tc in test_cases:
             res = self.sandbox.execute_code(
@@ -221,7 +254,8 @@ class JudgeService:
                 if final_status == SubmissionStatus.ACCEPTED:
                     final_status = res.status
                     failed_error_code = res.error_code
-                if res.status == SubmissionStatus.TIME_LIMIT:
+                    failed_stderr = res.stderr
+                if res.status in (SubmissionStatus.TIME_LIMIT, SubmissionStatus.SYNTAX_ERROR):
                     break
                 continue
 
@@ -245,6 +279,7 @@ class JudgeService:
             submission.error_code = failed_error_code
             submission.passed_test_cases = passed_test_cases
             submission.total_test_cases = total_test_cases
+            submission.stderr = failed_stderr
 
             if final_status == SubmissionStatus.ACCEPTED:
                 # Check or create user progress

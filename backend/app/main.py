@@ -30,6 +30,11 @@ async def lifespan(app: FastAPI):
                     conn.commit()
                 except Exception:
                     pass
+            try:
+                conn.execute(sa.text("ALTER TABLE submissions ADD COLUMN stderr TEXT"))
+                conn.commit()
+            except Exception:
+                pass
     except Exception:
         pass
     try:

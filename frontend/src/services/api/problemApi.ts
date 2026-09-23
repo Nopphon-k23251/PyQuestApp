@@ -15,6 +15,9 @@ export interface SubmitResult {
   totalTestCases?: number;
   passed_test_cases?: number;
   total_test_cases?: number;
+  error_code?: string | null;
+  errorCode?: string | null;
+  stderr?: string | null;
 }
 
 export const problemApi = {

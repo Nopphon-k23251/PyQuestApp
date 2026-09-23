@@ -28,7 +28,29 @@ def test_sandbox_runtime_error():
     res = SubprocessSandbox.execute_code(code=code, input_data="", timeout_ms=2000)
 
     assert res.status == SubmissionStatus.RUNTIME_ERROR
+    assert res.error_code == "ZeroDivisionError"
     assert "ZeroDivisionError" in res.stderr
+
+
+def test_sandbox_syntax_error():
+    # Unclosed parenthesis syntax error
+    code = "def foo(\n"
+    res = SubprocessSandbox.execute_code(code=code, input_data="", timeout_ms=2000)
+
+    assert res.status == SubmissionStatus.SYNTAX_ERROR
+    assert res.error_code == "SYNTAX_ERROR"
+    assert "SyntaxError" in res.stderr
+    assert "solution.py" in res.stderr
+
+
+def test_sandbox_name_error():
+    # User's exact scenario: typo 'prin' instead of 'print'
+    code = "prin(sum(map(int, input().split())))"
+    res = SubprocessSandbox.execute_code(code=code, input_data="1 2 3\n", timeout_ms=2000)
+
+    assert res.status == SubmissionStatus.RUNTIME_ERROR
+    assert res.error_code == "NameError"
+    assert "NameError: name 'prin' is not defined" in res.stderr
 
 
 def test_sandbox_timeout():

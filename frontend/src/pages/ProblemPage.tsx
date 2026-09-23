@@ -157,8 +157,33 @@ export const ProblemPage: React.FC = () => {
 
     try {
       const res: SubmitResult = await problemApi.submitCode(problem.id, code);
-      // Fetch complete judged submission
-      const judged = await submissionApi.getSubmission(res.submission_id);
+      let judged: Submission;
+      try {
+        judged = await submissionApi.getSubmission(res.submission_id);
+      } catch {
+        judged = {
+          id: res.submission_id,
+          userId: user?.id || 0,
+          problemId: problem.id,
+          language: "PYTHON",
+          status: res.status,
+          score: res.status === "ACCEPTED" ? problem.points : 0,
+          passedTestCases: res.passed_test_cases ?? res.passedTestCases ?? 0,
+          totalTestCases: res.total_test_cases ?? res.totalTestCases ?? 0,
+          errorCode: res.error_code ?? res.errorCode,
+          error_code: res.error_code ?? res.errorCode,
+          stderr: res.stderr,
+          createdAt: new Date().toISOString(),
+        };
+      }
+
+      if (!judged.stderr && res.stderr) {
+        judged.stderr = res.stderr;
+      }
+      if (!judged.errorCode && (res.error_code || res.errorCode)) {
+        judged.errorCode = res.error_code || res.errorCode;
+      }
+
       setSubmissionVerdict(judged);
 
       // If accepted, update local problem solved state
@@ -461,50 +486,66 @@ export const ProblemPage: React.FC = () => {
                   <p className="text-slate-500 text-xs">คุณยังไม่เคยส่งโจทย์ข้อนี้</p>
                 ) : (
                   <div className="space-y-2">
-                    {history.map((sub) => (
-                      <div
-                        key={sub.id}
-                        className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 flex items-center justify-between"
-                      >
-                        <div className="flex items-center space-x-2.5">
-                          {sub.status === "ACCEPTED" ? (
-                            <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                          ) : (
-                            <XCircle className="w-4 h-4 text-rose-400" />
-                          )}
-                          <div>
-                            <div className="flex items-center space-x-2">
-                              <span
-                                className={`text-xs font-bold ${
-                                  sub.status === "ACCEPTED"
-                                    ? "text-emerald-400"
-                                    : "text-rose-400"
-                                }`}
-                              >
-                                {sub.status}
-                              </span>
-                              {(sub.totalTestCases || sub.total_test_cases) ? (
-                                <span className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-white/5 text-slate-300 border border-white/10">
-                                  {sub.passedTestCases ?? sub.passed_test_cases ?? 0}/{sub.totalTestCases ?? sub.total_test_cases} ผ่าน
+                    {history.map((sub) => {
+                      const isSubAccepted = sub.status === "ACCEPTED";
+                      const isSubSyntax = sub.status === "SYNTAX_ERROR";
+                      const subRawErr = sub.errorCode || sub.error_code;
+                      const subSpecific = subRawErr && subRawErr !== "RUNTIME_ERROR" && subRawErr !== "SYNTAX_ERROR" ? subRawErr : null;
+                      const subLabel = isSubSyntax ? "SYNTAX_ERROR" : subSpecific ? `RUNTIME_ERROR (${subSpecific})` : sub.status;
+
+                      return (
+                        <div
+                          key={sub.id}
+                          onClick={() => {
+                            setSubmissionVerdict(sub);
+                            setActiveBottomTab("verdict");
+                            if (sub.code) setCode(sub.code);
+                          }}
+                          className="p-3 rounded-xl bg-slate-900/60 border border-slate-800 hover:border-slate-700 flex items-center justify-between cursor-pointer transition group"
+                          title="คลิกเพื่อดูรายละเอียดผลตรวจและโค้ดที่ส่ง"
+                        >
+                          <div className="flex items-center space-x-2.5">
+                            {isSubAccepted ? (
+                              <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+                            ) : isSubSyntax ? (
+                              <FileCode className="w-4 h-4 text-rose-400 flex-shrink-0" />
+                            ) : (
+                              <XCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+                            )}
+                            <div>
+                              <div className="flex items-center space-x-2">
+                                <span
+                                  className={`text-xs font-bold ${
+                                    isSubAccepted
+                                      ? "text-emerald-400"
+                                      : "text-rose-400"
+                                  }`}
+                                >
+                                  {subLabel}
                                 </span>
-                              ) : null}
+                                {(sub.totalTestCases || sub.total_test_cases) ? (
+                                  <span className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-white/5 text-slate-300 border border-white/10">
+                                    {sub.passedTestCases ?? sub.passed_test_cases ?? 0}/{sub.totalTestCases ?? sub.total_test_cases} ผ่าน
+                                  </span>
+                                ) : null}
+                              </div>
+                              <span className="text-[10px] text-slate-500 block">
+                                {new Date(sub.createdAt).toLocaleString()}
+                              </span>
                             </div>
-                            <span className="text-[10px] text-slate-500 block">
-                              {new Date(sub.createdAt).toLocaleString()}
+                          </div>
+
+                          <div className="text-right text-xs">
+                            <span className="font-semibold text-white">
+                              {sub.score} pts
+                            </span>
+                            <span className="text-[11px] text-slate-400 block">
+                              {sub.executionTimeMs ?? 0} ms
                             </span>
                           </div>
                         </div>
-
-                        <div className="text-right text-xs">
-                          <span className="font-semibold text-white">
-                            {sub.score} pts
-                          </span>
-                          <span className="text-[11px] text-slate-400 block">
-                            {sub.executionTimeMs ?? 0} ms
-                          </span>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -674,30 +715,71 @@ export const ProblemPage: React.FC = () => {
                       const totalCount = submissionVerdict.totalTestCases ?? submissionVerdict.total_test_cases ?? 1;
                       const percentage = totalCount > 0 ? Math.round((passedCount / totalCount) * 100) : (submissionVerdict.status === "ACCEPTED" ? 100 : 0);
 
+                      const isAccepted = submissionVerdict.status === "ACCEPTED";
+                      const isSyntaxError = submissionVerdict.status === "SYNTAX_ERROR";
+                      const isTimeLimit = submissionVerdict.status === "TIME_LIMIT";
+                      const isMemoryLimit = submissionVerdict.status === "MEMORY_LIMIT";
+                      const isWrongAnswer = submissionVerdict.status === "WRONG_ANSWER";
+
+                      const rawErrorCode = submissionVerdict.errorCode || submissionVerdict.error_code;
+                      const specificError = rawErrorCode && rawErrorCode !== "RUNTIME_ERROR" && rawErrorCode !== "SYNTAX_ERROR" ? rawErrorCode : null;
+
+                      // Determine badge title
+                      let statusBadgeTitle = submissionVerdict.status as string;
+                      if (isSyntaxError) {
+                        statusBadgeTitle = "SYNTAX_ERROR";
+                      } else if (specificError) {
+                        statusBadgeTitle = `RUNTIME_ERROR (${specificError})`;
+                      }
+
+                      // Determine subtitle explanation
+                      let subtitle = "";
+                      if (isAccepted) {
+                        subtitle = `ผ่านการตรวจสอบครบทุก Test Cases (${totalCount}/${totalCount})`;
+                      } else if (isSyntaxError) {
+                        subtitle = "ไวยากรณ์โค้ดไม่ถูกต้อง (Syntax / Indentation Error) โปรดดูรายละเอียดข้อผิดพลาดด้านล่าง";
+                      } else if (specificError) {
+                        subtitle = `เกิดข้อผิดพลาด ${specificError} ขณะประมวลผล (ผ่าน ${passedCount}/${totalCount} Test Cases)`;
+                      } else if (isWrongAnswer) {
+                        subtitle = `ผลลัพธ์ไม่ตรงกับคำตอบที่ถูกต้อง (ผ่าน ${passedCount} จากทั้งหมด ${totalCount} Test Cases)`;
+                      } else if (isTimeLimit) {
+                        subtitle = `โค้ดใช้เวลาทำงานเกินขีดจำกัดที่กำหนด (${submissionVerdict.executionTimeMs ?? 0} ms)`;
+                      } else {
+                        subtitle = `ผ่าน ${passedCount} จากทั้งหมด ${totalCount} Test Cases (${percentage}%)`;
+                      }
+
                       return (
                         <div
-                          className={`p-4 rounded-xl border space-y-3 ${
-                            submissionVerdict.status === "ACCEPTED"
+                          className={`p-4 rounded-xl border space-y-3.5 ${
+                            isAccepted
                               ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300 glow-emerald"
+                              : isSyntaxError
+                              ? "bg-rose-500/10 border-rose-500/30 text-rose-300 glow-rose"
+                              : isTimeLimit
+                              ? "bg-amber-500/10 border-amber-500/30 text-amber-300"
                               : "bg-rose-500/10 border-rose-500/30 text-rose-300 glow-rose"
                           }`}
                         >
                           <div className="flex items-center justify-between">
                             <div className="flex items-center space-x-2.5">
-                              {submissionVerdict.status === "ACCEPTED" ? (
+                              {isAccepted ? (
                                 <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                              ) : isSyntaxError ? (
+                                <FileCode className="w-5 h-5 text-rose-400 flex-shrink-0" />
+                              ) : isTimeLimit ? (
+                                <Clock className="w-5 h-5 text-amber-400 flex-shrink-0" />
                               ) : (
                                 <XCircle className="w-5 h-5 text-rose-400 flex-shrink-0" />
                               )}
                               <div>
                                 <div className="flex items-center space-x-2">
                                   <span className="text-base font-bold">
-                                    {submissionVerdict.status}
+                                    {statusBadgeTitle}
                                   </span>
-                                  {totalCount > 0 && (
+                                  {totalCount > 0 && !isSyntaxError && (
                                     <span
                                       className={`px-2 py-0.5 rounded-full text-xs font-semibold font-mono border ${
-                                        submissionVerdict.status === "ACCEPTED"
+                                        isAccepted
                                           ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
                                           : "bg-rose-500/20 text-rose-300 border-rose-500/40"
                                       }`}
@@ -705,11 +787,14 @@ export const ProblemPage: React.FC = () => {
                                       ผ่าน {passedCount} / {totalCount} Test Cases
                                     </span>
                                   )}
+                                  {isSyntaxError && (
+                                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold font-mono border bg-rose-500/20 text-rose-300 border-rose-500/40">
+                                      ไม่สามารถรันได้
+                                    </span>
+                                  )}
                                 </div>
                                 <span className="text-[11px] text-slate-400 block mt-0.5 font-sans">
-                                  {submissionVerdict.status === "ACCEPTED"
-                                    ? `ผ่านการตรวจสอบครบทุก Test Cases (${totalCount}/${totalCount})`
-                                    : `ผ่าน ${passedCount} จากทั้งหมด ${totalCount} Test Cases (${percentage}%)`}
+                                  {subtitle}
                                 </span>
                               </div>
                             </div>
@@ -725,18 +810,49 @@ export const ProblemPage: React.FC = () => {
                           </div>
 
                           {/* Visual Progress Bar */}
-                          {totalCount > 0 && (
+                          {totalCount > 0 && !isSyntaxError && (
                             <div className="space-y-1 pt-1">
                               <div className="w-full h-2 rounded-full bg-black/40 overflow-hidden border border-white/5">
                                 <div
                                   className={`h-full rounded-full transition-all duration-500 ${
-                                    submissionVerdict.status === "ACCEPTED"
+                                    isAccepted
                                       ? "bg-gradient-to-r from-emerald-500 to-teal-400"
                                       : "bg-gradient-to-r from-amber-500 to-rose-500"
                                   }`}
                                   style={{ width: `${Math.min(100, Math.max(0, percentage))}%` }}
                                 />
                               </div>
+                            </div>
+                          )}
+
+                          {/* Error Traceback & Details */}
+                          {submissionVerdict.stderr && (
+                            <div className="space-y-1.5 text-left pt-2 border-t border-white/10">
+                              <div className="flex items-center justify-between">
+                                <span className="text-[11px] font-semibold text-rose-300 flex items-center space-x-1.5 font-sans">
+                                  <Terminal className="w-3.5 h-3.5 text-rose-400" />
+                                  <span>รายละเอียดข้อผิดพลาด (Traceback / Error Output):</span>
+                                </span>
+                                <button
+                                  onClick={() => copyToClipboard(submissionVerdict.stderr!, 999)}
+                                  className="text-[10px] text-slate-400 hover:text-slate-200 flex items-center space-x-1 font-sans px-2 py-0.5 rounded bg-white/5 hover:bg-white/10 transition"
+                                >
+                                  {copiedIndex === 999 ? (
+                                    <>
+                                      <Check className="w-3 h-3 text-emerald-400" />
+                                      <span className="text-emerald-400">คัดลอกแล้ว</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Copy className="w-3 h-3" />
+                                      <span>คัดลอก Error</span>
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                              <pre className="p-3 rounded-lg bg-black/60 border border-rose-500/25 text-rose-200 text-xs font-mono whitespace-pre-wrap overflow-x-auto leading-relaxed selection:bg-rose-500/30 max-h-60">
+                                {submissionVerdict.stderr}
+                              </pre>
                             </div>
                           )}
                         </div>

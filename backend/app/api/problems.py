@@ -132,6 +132,8 @@ async def submit_code_solution(
             status=submission.status,
             passed_test_cases=submission.passed_test_cases or 0,
             total_test_cases=submission.total_test_cases or 0,
+            error_code=submission.error_code,
+            stderr=submission.stderr,
         ),
     )
 

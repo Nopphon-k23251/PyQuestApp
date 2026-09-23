@@ -25,6 +25,8 @@ class SubmissionSubmitResponse(BaseModel):
     status: SubmissionStatus
     passed_test_cases: int = 0
     total_test_cases: int = 0
+    error_code: Optional[str] = None
+    stderr: Optional[str] = None
 
 
 class SubmissionResponse(BaseModel):
@@ -41,6 +43,7 @@ class SubmissionResponse(BaseModel):
     code: Optional[str] = None
     passed_test_cases: int = 0
     total_test_cases: int = 0
+    stderr: Optional[str] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

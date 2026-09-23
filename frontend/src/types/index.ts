@@ -10,6 +10,7 @@ export type SubmissionStatus =
   | "TIME_LIMIT"
   | "MEMORY_LIMIT"
   | "RUNTIME_ERROR"
+  | "SYNTAX_ERROR"
   | "SYSTEM_ERROR";
 
 export interface User {
@@ -105,11 +106,13 @@ export interface Submission {
   executionTimeMs?: number | null;
   memoryUsedMb?: number | null;
   errorCode?: string | null;
+  error_code?: string | null;
   code?: string | null;
   passedTestCases?: number;
   totalTestCases?: number;
   passed_test_cases?: number;
   total_test_cases?: number;
+  stderr?: string | null;
   createdAt: string;
 }
 

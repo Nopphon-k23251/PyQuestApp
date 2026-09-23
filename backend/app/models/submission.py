@@ -12,6 +12,7 @@ class SubmissionStatus(str, enum.Enum):
     TIME_LIMIT = "TIME_LIMIT"
     MEMORY_LIMIT = "MEMORY_LIMIT"
     RUNTIME_ERROR = "RUNTIME_ERROR"
+    SYNTAX_ERROR = "SYNTAX_ERROR"
     SYSTEM_ERROR = "SYSTEM_ERROR"
 
 
@@ -30,6 +31,7 @@ class Submission(Base):
     error_code = Column(String(50), nullable=True)
     passed_test_cases = Column(Integer, nullable=False, default=0)
     total_test_cases = Column(Integer, nullable=False, default=0)
+    stderr = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     __table_args__ = (

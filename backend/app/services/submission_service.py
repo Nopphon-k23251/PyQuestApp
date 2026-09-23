@@ -80,6 +80,7 @@ class SubmissionService:
             code=submission.code,
             passed_test_cases=submission.passed_test_cases or 0,
             total_test_cases=submission.total_test_cases or 0,
+            stderr=submission.stderr,
             created_at=submission.created_at,
         )
 
@@ -123,6 +124,7 @@ class SubmissionService:
                     code=s.code,
                     passed_test_cases=s.passed_test_cases or 0,
                     total_test_cases=s.total_test_cases or 0,
+                    stderr=s.stderr,
                     created_at=s.created_at,
                 )
             )
@@ -171,6 +173,7 @@ class SubmissionService:
                     code=s.code,
                     passed_test_cases=s.passed_test_cases or 0,
                     total_test_cases=s.total_test_cases or 0,
+                    stderr=s.stderr,
                     created_at=s.created_at,
                 )
             )
