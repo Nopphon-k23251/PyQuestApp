@@ -1,4 +1,5 @@
 import time
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError, HTTPException
@@ -15,16 +16,31 @@ from app.api.progress import router as progress_router
 from app.api.admin import router as admin_router
 from app.api.playground import router as playground_router
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Ensure database schema is created on startup
+    Base.metadata.create_all(bind=engine)
+    try:
+        from app.core.seed_data import seed_database
+        seed_database()
+    except Exception as e:
+        logger.warning(f"Auto seed on startup skipped or failed: {e}")
+    yield
+
+
 app = FastAPI(
     title=settings.PROJECT_NAME,
     description="Python Practice Platform API with User/Admin roles, Courses, Problems, Sandboxed Judge, Points, Stars, and Progress.",
     version="1.0.0",
+    lifespan=lifespan,
 )
 
-# CORS Middleware
+# CORS Middleware (supports local dev and any Vercel deployment)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
+    allow_origin_regex=r"^https://.*\.vercel\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
