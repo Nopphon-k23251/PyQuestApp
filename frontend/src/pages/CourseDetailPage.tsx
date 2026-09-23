@@ -19,6 +19,42 @@ import { problemApi } from "../services/api/problemApi";
 import { useAuth } from "../features/auth/AuthContext";
 import { CourseDetail, ProblemListItem, Difficulty } from "../types";
 
+const TOPIC_LIST = [
+  "พื้นฐานและตัวแปร",
+  "เงื่อนไขและการตัดสินใจ",
+  "การวนซ้ำและการทำซ้ำ",
+  "ข้อความและสตริงเมธอด",
+  "ลิสต์และลิสต์เมธอด",
+  "ดิกชันนารีและคู่ข้อมูล",
+  "การสร้างและใช้งานฟังก์ชัน",
+  "แบบฝึกหัดทบทวนและโจทย์ประยุกต์",
+];
+
+const getDifficultyBadge = (diff: string) => {
+  switch (diff?.toUpperCase()) {
+    case "EASY":
+      return (
+        <span className="px-2 py-0.5 text-[11px] font-semibold rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+          EASY
+        </span>
+      );
+    case "MEDIUM":
+      return (
+        <span className="px-2 py-0.5 text-[11px] font-semibold rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+          MEDIUM
+        </span>
+      );
+    case "HARD":
+      return (
+        <span className="px-2 py-0.5 text-[11px] font-semibold rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">
+          HARD
+        </span>
+      );
+    default:
+      return null;
+  }
+};
+
 export const CourseDetailPage: React.FC = () => {
   const { courseId } = useParams<{ courseId: string }>();
   const { user } = useAuth();
@@ -26,6 +62,7 @@ export const CourseDetailPage: React.FC = () => {
   const [course, setCourse] = useState<CourseDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedTopic, setSelectedTopic] = useState<string>("ALL");
 
   useEffect(() => {
     if (courseId) {
@@ -46,12 +83,45 @@ export const CourseDetailPage: React.FC = () => {
     }
   };
 
+  const problemsList: ProblemListItem[] = useMemo(() => {
+    return course?.problems || (course as any)?.problemList || [];
+  }, [course]);
+
+  const total = course?.totalProblems ?? (course as any)?.total_problems ?? problemsList.length;
+  const solved = course?.solvedProblems ?? (course as any)?.solved_problems ?? problemsList.filter((p: any) => p.isSolved || p.is_solved).length;
+  const pct = total > 0 ? (solved / total) * 100 : 0;
+
+  const topicStats = useMemo(() => {
+    const stats: Record<string, { total: number; solved: number }> = {};
+    TOPIC_LIST.forEach((t) => {
+      stats[t] = { total: 0, solved: 0 };
+    });
+
+    problemsList.forEach((p: any) => {
+      const t = p.topic || "ทั่วไป";
+      if (!stats[t]) {
+        stats[t] = { total: 0, solved: 0 };
+      }
+      stats[t].total += 1;
+      if (p.isSolved || p.is_solved) {
+        stats[t].solved += 1;
+      }
+    });
+    return stats;
+  }, [problemsList]);
+
+  const visibleTopics = useMemo(() => {
+    if (selectedTopic !== "ALL") {
+      return [selectedTopic];
+    }
+    return TOPIC_LIST.filter((t) => (topicStats[t]?.total ?? 0) > 0);
+  }, [selectedTopic, topicStats]);
+
   const handleToggleStar = async (problemId: number, e: React.MouseEvent) => {
     e.preventDefault();
     if (!user) return;
     try {
-      const problems = course?.problems || (course as any)?.problemList || [];
-      const prob = problems.find((p: any) => p.id === problemId);
+      const prob = problemsList.find((p: any) => p.id === problemId);
       if (!prob) return;
 
       const isStarred = prob.isStarred ?? (prob as any).is_starred;
@@ -101,75 +171,6 @@ export const CourseDetailPage: React.FC = () => {
       </div>
     );
   }
-
-  const TOPIC_LIST = [
-    "พื้นฐานและตัวแปร",
-    "เงื่อนไขและการตัดสินใจ",
-    "การวนซ้ำและการทำซ้ำ",
-    "ข้อความและสตริงเมธอด",
-    "ลิสต์และลิสต์เมธอด",
-    "ดิกชันนารีและคู่ข้อมูล",
-    "การสร้างและใช้งานฟังก์ชัน",
-    "แบบฝึกหัดทบทวนและโจทย์ประยุกต์",
-  ];
-
-  const [selectedTopic, setSelectedTopic] = useState<string>("ALL");
-
-  const problemsList: ProblemListItem[] = course.problems || (course as any).problemList || [];
-  const total = course.totalProblems ?? (course as any).total_problems ?? problemsList.length;
-  const solved = course.solvedProblems ?? (course as any).solved_problems ?? problemsList.filter((p: any) => p.isSolved || p.is_solved).length;
-  const pct = total > 0 ? (solved / total) * 100 : 0;
-
-  const topicStats = useMemo(() => {
-    const stats: Record<string, { total: number; solved: number }> = {};
-    TOPIC_LIST.forEach((t) => {
-      stats[t] = { total: 0, solved: 0 };
-    });
-
-    problemsList.forEach((p: any) => {
-      const t = p.topic || "ทั่วไป";
-      if (!stats[t]) {
-        stats[t] = { total: 0, solved: 0 };
-      }
-      stats[t].total += 1;
-      if (p.isSolved || p.is_solved) {
-        stats[t].solved += 1;
-      }
-    });
-    return stats;
-  }, [problemsList]);
-
-  const visibleTopics = useMemo(() => {
-    if (selectedTopic !== "ALL") {
-      return [selectedTopic];
-    }
-    return TOPIC_LIST.filter((t) => (topicStats[t]?.total ?? 0) > 0);
-  }, [selectedTopic, topicStats]);
-
-  const getDifficultyBadge = (diff: string) => {
-    switch (diff?.toUpperCase()) {
-      case "EASY":
-        return (
-          <span className="px-2 py-0.5 text-[11px] font-semibold rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-            EASY
-          </span>
-        );
-      case "MEDIUM":
-        return (
-          <span className="px-2 py-0.5 text-[11px] font-semibold rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
-            MEDIUM
-          </span>
-        );
-      case "HARD":
-        return (
-          <span className="px-2 py-0.5 text-[11px] font-semibold rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">
-            HARD
-          </span>
-        );
-      default:
-        return null;
-    }
-  };
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
