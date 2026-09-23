@@ -123,3 +123,27 @@ if __name__ == '__main__':
     prog_data = prog_res.json()["data"]
     assert prog_data["solved_problems"] >= 1
     assert prog_data["total_points"] >= 10
+
+
+def test_all_eight_modules_seeded(client, db_session):
+    seed_thai_problems(db=db_session)
+    courses = db_session.query(Course).all()
+    assert len(courses) >= 8
+
+    expected_slugs = [
+        "python-basics",
+        "python-conditions",
+        "python-loops",
+        "python-strings",
+        "python-lists",
+        "python-dicts",
+        "python-functions",
+        "python-recap",
+    ]
+    course_slugs = [c.slug for c in courses]
+    for es in expected_slugs:
+        assert es in course_slugs
+
+    # Verify problem count across all modules
+    problems = db_session.query(Problem).all()
+    assert len(problems) >= 30

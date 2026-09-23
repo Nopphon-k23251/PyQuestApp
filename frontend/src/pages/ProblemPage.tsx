@@ -63,11 +63,25 @@ export const ProblemPage: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+  const getProblemDraftKey = (pId: string | number, uId?: number | string) => {
+    return `pyquest_code_draft_${pId}_${uId || "guest"}`;
+  };
+
   useEffect(() => {
     if (problemId) {
-      loadProblem(parseInt(problemId));
+      const id = parseInt(problemId);
+      // Restore draft from localStorage if present
+      const draftKey = getProblemDraftKey(id, user?.id);
+      const fallbackKey = `pyquest_code_draft_${id}`;
+      const savedDraft = localStorage.getItem(draftKey) || localStorage.getItem(fallbackKey);
+      if (savedDraft) {
+        setCode(savedDraft);
+      } else {
+        setCode(DEFAULT_PYTHON_TEMPLATE);
+      }
+      loadProblem(id);
     }
-  }, [problemId]);
+  }, [problemId, user?.id]);
 
   const loadProblem = async (id: number) => {
     setLoading(true);
@@ -91,8 +105,33 @@ export const ProblemPage: React.FC = () => {
     try {
       const res = await submissionApi.getMySubmissions(id, undefined, 1, 20);
       setHistory(res.items);
+
+      // If user has no active draft in localStorage, load their latest submitted code!
+      const draftKey = getProblemDraftKey(id, user.id);
+      const fallbackKey = `pyquest_code_draft_${id}`;
+      const hasDraft = localStorage.getItem(draftKey) || localStorage.getItem(fallbackKey);
+      if (!hasDraft && res.items.length > 0 && res.items[0].code) {
+        setCode(res.items[0].code);
+      }
     } catch {
       // Ignore
+    }
+  };
+
+  const handleCodeChange = (newCode: string) => {
+    setCode(newCode);
+    if (problemId) {
+      localStorage.setItem(getProblemDraftKey(problemId, user?.id), newCode);
+    }
+  };
+
+  const handleResetCode = () => {
+    if (window.confirm("คุณต้องการรีเซ็ตโค้ดกลับเป็นเทมเพลตเริ่มต้นใช่หรือไม่? โค้ดที่พิมพ์ไว้จะถูกล้าง")) {
+      setCode(DEFAULT_PYTHON_TEMPLATE);
+      if (problemId) {
+        localStorage.removeItem(getProblemDraftKey(problemId, user?.id));
+        localStorage.removeItem(`pyquest_code_draft_${problemId}`);
+      }
     }
   };
 
@@ -568,6 +607,11 @@ export const ProblemPage: React.FC = () => {
             </div>
 
             <div className="flex items-center space-x-2">
+              <span className="text-[11px] text-emerald-400/90 hidden sm:flex items-center space-x-1 font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                <Check className="w-3 h-3 text-emerald-400" />
+                <span>บันทึกแบบร่างอัตโนมัติ</span>
+              </span>
+
               <input
                 type="file"
                 ref={fileInputRef}
@@ -587,11 +631,12 @@ export const ProblemPage: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => setCode(DEFAULT_PYTHON_TEMPLATE)}
-                title="รีเซ็ตโค้ดเป็นค่าเริ่มต้น"
-                className="p-1.5 text-slate-400 hover:text-white hover:bg-slate-800/80 rounded-lg transition-colors"
+                onClick={handleResetCode}
+                title="รีเซ็ตโค้ดกลับเป็นค่าเริ่มต้น"
+                className="flex items-center space-x-1 px-2 py-1 text-xs text-slate-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-colors border border-white/5"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
+                <RotateCcw className="w-3.5 h-3.5 text-slate-400 hover:text-rose-400" />
+                <span>รีเซ็ต</span>
               </button>
             </div>
           </div>
@@ -600,7 +645,7 @@ export const ProblemPage: React.FC = () => {
           <div className="flex-1 min-h-[320px] relative overflow-hidden p-2 bg-[#060810]">
             <CodeEditor
               value={code}
-              onChange={setCode}
+              onChange={handleCodeChange}
               language="python"
               onRun={handleRun}
             />

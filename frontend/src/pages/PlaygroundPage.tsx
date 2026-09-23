@@ -126,8 +126,12 @@ print(f"ค่ามัธยฐาน (Median): {median:.2f}")
 ];
 
 export const PlaygroundPage: React.FC = () => {
-  const [code, setCode] = useState(SNIPPETS[0].code);
-  const [customInput, setCustomInput] = useState(SNIPPETS[0].defaultInput || "");
+  const [code, setCode] = useState(() => {
+    return localStorage.getItem("pyquest_playground_code") || SNIPPETS[0].code;
+  });
+  const [customInput, setCustomInput] = useState(() => {
+    return localStorage.getItem("pyquest_playground_input") ?? (SNIPPETS[0].defaultInput || "");
+  });
   const [selectedSnippet, setSelectedSnippet] = useState<string>(SNIPPETS[0].name);
 
   // Execution states
@@ -144,14 +148,32 @@ export const PlaygroundPage: React.FC = () => {
 
   const lineCount = code.split("\n").length;
 
+  const handleCodeChange = (newCode: string) => {
+    setCode(newCode);
+    localStorage.setItem("pyquest_playground_code", newCode);
+  };
+
+  const handleCustomInputChange = (newInput: string) => {
+    setCustomInput(newInput);
+    localStorage.setItem("pyquest_playground_input", newInput);
+  };
+
   const handleSnippetChange = (snippetName: string) => {
     const snip = SNIPPETS.find((s) => s.name === snippetName);
     if (snip) {
       setSelectedSnippet(snippetName);
-      setCode(snip.code);
+      handleCodeChange(snip.code);
       if (snip.defaultInput !== undefined) {
-        setCustomInput(snip.defaultInput);
+        handleCustomInputChange(snip.defaultInput);
       }
+    }
+  };
+
+  const handleResetPlayground = () => {
+    if (window.confirm("คุณต้องการรีเซ็ต Playground เป็นค่าเริ่มต้นใช่หรือไม่?")) {
+      const snip = SNIPPETS.find((s) => s.name === selectedSnippet) || SNIPPETS[0];
+      handleCodeChange(snip.code);
+      handleCustomInputChange(snip.defaultInput || "");
     }
   };
 
@@ -369,9 +391,14 @@ export const PlaygroundPage: React.FC = () => {
                 )}
               </button>
 
+              <span className="text-[11px] text-emerald-400/90 hidden sm:flex items-center space-x-1 font-mono bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                <Check className="w-3 h-3 text-emerald-400" />
+                <span>บันทึกแบบร่างแล้ว</span>
+              </span>
+
               <button
                 type="button"
-                onClick={() => setCode("")}
+                onClick={() => handleCodeChange("")}
                 title="ล้างโค้ดทั้งหมดใน Editor"
                 className="p-1.5 rounded-lg text-slate-400 hover:text-rose-400 hover:bg-slate-800/80 transition-colors"
               >
@@ -380,14 +407,12 @@ export const PlaygroundPage: React.FC = () => {
 
               <button
                 type="button"
-                onClick={() => {
-                  const snip = SNIPPETS.find((s) => s.name === selectedSnippet);
-                  if (snip) setCode(snip.code);
-                }}
+                onClick={handleResetPlayground}
                 title="รีเซ็ตโค้ดกลับเป็นค่าเริ่มต้นของ Snippet นี้"
-                className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors"
+                className="flex items-center space-x-1 px-2 py-1 rounded-lg text-xs text-slate-400 hover:text-white hover:bg-slate-800/80 transition-colors border border-white/5"
               >
-                <RotateCcw className="w-3.5 h-3.5" />
+                <RotateCcw className="w-3.5 h-3.5 text-slate-400" />
+                <span>รีเซ็ต</span>
               </button>
 
               {/* Main Run Button */}
@@ -406,7 +431,7 @@ export const PlaygroundPage: React.FC = () => {
           <div className="flex-1 min-h-[450px] relative overflow-hidden p-2 bg-[#060911]">
             <CodeEditor
               value={code}
-              onChange={setCode}
+              onChange={handleCodeChange}
               language="python"
               onRun={handleRun}
             />
@@ -424,7 +449,7 @@ export const PlaygroundPage: React.FC = () => {
               </span>
               <button
                 type="button"
-                onClick={() => setCustomInput("")}
+                onClick={() => handleCustomInputChange("")}
                 className="text-[11px] text-slate-400 hover:text-rose-400 transition-colors"
               >
                 ล้าง Input
@@ -433,7 +458,7 @@ export const PlaygroundPage: React.FC = () => {
 
             <textarea
               value={customInput}
-              onChange={(e) => setCustomInput(e.target.value)}
+              onChange={(e) => handleCustomInputChange(e.target.value)}
               placeholder="กรอกข้อมูลสำหรับคำสั่ง input() ที่นี่ (แยกแต่ละค่าด้วยบรรทัดใหม่หรือช่องว่าง)..."
               className="flex-1 p-3 bg-[#060911] text-emerald-300 font-mono text-xs leading-5 resize-none focus:outline-none placeholder-slate-600 overflow-y-auto"
             />
