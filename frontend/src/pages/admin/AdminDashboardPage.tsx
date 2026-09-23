@@ -36,6 +36,7 @@ import {
   Difficulty,
 } from "../../types";
 import { ConfirmModal, ConfirmModalType } from "../../components/feedback/ConfirmModal";
+import { CustomSelect } from "../../components/common/CustomSelect";
 
 export const AdminDashboardPage: React.FC = () => {
   // Navigation / Selection State
@@ -144,12 +145,8 @@ export const AdminDashboardPage: React.FC = () => {
       setProblems(loadedProblems);
       setSubmissions(sRes?.items || []);
 
-      // Auto-expand all courses initially
-      const initialExpanded: Record<number, boolean> = {};
-      loadedCourses.forEach((c) => {
-        initialExpanded[c.id] = true;
-      });
-      setExpandedCourses((prev) => ({ ...initialExpanded, ...prev }));
+      // Keep course folders closed by default
+      setExpandedCourses({});
     } catch (err: any) {
       console.error("Admin data load error:", err);
       showToast(err.message || "เกิดข้อผิดพลาดในการโหลดข้อมูล", "error");
@@ -533,18 +530,18 @@ export const AdminDashboardPage: React.FC = () => {
         <div className="flex items-center space-x-2">
           <button
             onClick={() => handleOpenCourseModal()}
-            className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition-all"
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>+ คอร์ส</span>
+            <span>สร้างคอร์ส</span>
           </button>
 
           <button
             onClick={() => handleOpenProblemModal(undefined, selectedCourseId || undefined)}
-            className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-all"
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-colors"
           >
             <Plus className="w-3.5 h-3.5" />
-            <span>+ โจทย์</span>
+            <span>สร้างโจทย์</span>
           </button>
 
           <button
@@ -618,7 +615,7 @@ export const AdminDashboardPage: React.FC = () => {
               </div>
             ) : (
               filteredCourses.map((course) => {
-                const isExpanded = expandedCourses[course.id] ?? true;
+                const isExpanded = searchQuery.trim() ? true : (expandedCourses[course.id] ?? false);
                 const isCourseSelected = activeView === "course" && selectedCourseId === course.id;
                 const courseProblems = problems.filter((p) => p.courseId === course.id);
 
@@ -627,18 +624,18 @@ export const AdminDashboardPage: React.FC = () => {
                     {/* Course Folder Row */}
                     <div
                       onClick={() => selectCourse(course)}
-                      className={`group flex items-center justify-between px-2 py-1.5 rounded-lg cursor-pointer text-xs font-medium transition-all ${
+                      className={`group relative flex items-center justify-between px-2 py-1.5 rounded-lg cursor-pointer text-xs font-medium transition-colors ${
                         isCourseSelected
                           ? "bg-indigo-600/20 text-white font-semibold border border-indigo-500/30"
                           : "text-slate-300 hover:bg-white/[0.04]"
                       }`}
                     >
-                      <div className="flex items-center space-x-1.5 min-w-0">
+                      <div className="flex items-center space-x-1.5 min-w-0 pr-16">
                         {/* Expand / Collapse Chevron */}
                         <button
                           type="button"
                           onClick={(e) => toggleCourseExpand(course.id, e)}
-                          className="p-0.5 text-slate-500 hover:text-slate-300"
+                          className="p-0.5 text-slate-500 hover:text-slate-300 transition-colors"
                         >
                           {isExpanded ? (
                             <ChevronDown className="w-3.5 h-3.5" />
@@ -657,44 +654,43 @@ export const AdminDashboardPage: React.FC = () => {
                         <span className="truncate">{course.title}</span>
                       </div>
 
-                      {/* Right metadata & Hover action icons */}
-                      <div className="flex items-center space-x-1">
-                        <span className="text-[10px] text-slate-500 group-hover:hidden">
-                          ({courseProblems.length})
-                        </span>
+                      {/* Right metadata (always fixed in place, never shifts) */}
+                      <span className="text-[10px] text-slate-500 flex-shrink-0 pr-0.5">
+                        ({courseProblems.length})
+                      </span>
 
-                        <div className="hidden group-hover:flex items-center space-x-1">
-                          <button
-                            type="button"
-                            title="สร้างโจทย์ในคอร์สนี้"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenProblemModal(undefined, course.id);
-                            }}
-                            className="p-1 hover:text-emerald-400 rounded"
-                          >
-                            <Plus className="w-3 h-3" />
-                          </button>
-                          <button
-                            type="button"
-                            title="แก้ไขคอร์ส"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleOpenCourseModal(course);
-                            }}
-                            className="p-1 hover:text-indigo-400 rounded"
-                          >
-                            <Edit2 className="w-3 h-3" />
-                          </button>
-                          <button
-                            type="button"
-                            title="ลบคอร์ส"
-                            onClick={(e) => triggerDeleteCourse(course, e)}
-                            className="p-1 hover:text-rose-400 rounded"
-                          >
-                            <Trash2 className="w-3 h-3" />
-                          </button>
-                        </div>
+                      {/* Absolute Hover Action Overlay (zero layout shift underneath) */}
+                      <div className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex items-center space-x-0.5 bg-[#0b101e]/95 border border-white/10 rounded-md px-1 py-0.5 shadow-lg pointer-events-none group-hover:pointer-events-auto">
+                        <button
+                          type="button"
+                          title="สร้างโจทย์ในคอร์สนี้"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenProblemModal(undefined, course.id);
+                          }}
+                          className="p-1 text-slate-400 hover:text-emerald-400 rounded transition-colors"
+                        >
+                          <Plus className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          title="แก้ไขคอร์ส"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleOpenCourseModal(course);
+                          }}
+                          className="p-1 text-slate-400 hover:text-indigo-400 rounded transition-colors"
+                        >
+                          <Edit2 className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          title="ลบคอร์ส"
+                          onClick={(e) => triggerDeleteCourse(course, e)}
+                          className="p-1 text-slate-400 hover:text-rose-400 rounded transition-colors"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
                       </div>
                     </div>
 
@@ -714,44 +710,48 @@ export const AdminDashboardPage: React.FC = () => {
                               <div
                                 key={prob.id}
                                 onClick={() => selectProblem(prob)}
-                                className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer text-xs transition-all ${
+                                className={`group relative flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer text-xs transition-colors ${
                                   isProblemSelected
                                     ? "bg-emerald-500/15 text-emerald-300 font-semibold border border-emerald-500/30"
-                                    : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.03]"
+                                    : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]"
                                 }`}
                               >
-                                <div className="flex items-center space-x-2 min-w-0">
-                                  <FileCode className={`w-3.5 h-3.5 flex-shrink-0 ${
-                                    isProblemSelected ? "text-emerald-400" : "text-slate-500"
-                                  }`} />
+                                <div className="flex items-center space-x-2 min-w-0 pr-14">
+                                  <FileCode
+                                    className={`w-3.5 h-3.5 flex-shrink-0 ${
+                                      isProblemSelected ? "text-emerald-400" : "text-slate-500"
+                                    }`}
+                                  />
                                   <span className="truncate">{prob.title}.py</span>
                                 </div>
 
-                                <div className="flex items-center space-x-1.5 flex-shrink-0">
+                                {/* Always visible difficulty badge (never moves) */}
+                                <div className="flex items-center flex-shrink-0">
                                   {getDifficultyBadge(prob.difficulty)}
+                                </div>
 
-                                  <div className="hidden group-hover:flex items-center space-x-1">
-                                    <button
-                                      type="button"
-                                      title={prob.isPublished ? "ซ่อนเป็นดราฟต์" : "เผยแพร่โจทย์"}
-                                      onClick={(e) => handleTogglePublishProblem(prob, e)}
-                                      className="p-1 hover:text-indigo-400 rounded"
-                                    >
-                                      {prob.isPublished ? (
-                                        <Eye className="w-3 h-3 text-emerald-400" />
-                                      ) : (
-                                        <EyeOff className="w-3 h-3 text-slate-500" />
-                                      )}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      title="ลบโจทย์"
-                                      onClick={(e) => triggerDeleteProblem(prob, e)}
-                                      className="p-1 hover:text-rose-400 rounded"
-                                    >
-                                      <Trash2 className="w-3 h-3" />
-                                    </button>
-                                  </div>
+                                {/* Absolute Hover Action Overlay (zero layout shift underneath) */}
+                                <div className="absolute right-1 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity duration-150 flex items-center space-x-0.5 bg-[#0b101e]/95 border border-white/10 rounded-md px-1 py-0.5 shadow-lg pointer-events-none group-hover:pointer-events-auto">
+                                  <button
+                                    type="button"
+                                    title={prob.isPublished ? "ซ่อนเป็นดราฟต์" : "เผยแพร่โจทย์"}
+                                    onClick={(e) => handleTogglePublishProblem(prob, e)}
+                                    className="p-1 text-slate-400 hover:text-indigo-400 rounded transition-colors"
+                                  >
+                                    {prob.isPublished ? (
+                                      <Eye className="w-3 h-3 text-emerald-400" />
+                                    ) : (
+                                      <EyeOff className="w-3 h-3 text-slate-500" />
+                                    )}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    title="ลบโจทย์"
+                                    onClick={(e) => triggerDeleteProblem(prob, e)}
+                                    className="p-1 text-slate-400 hover:text-rose-400 rounded transition-colors"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
                                 </div>
                               </div>
                             );
@@ -953,10 +953,10 @@ export const AdminDashboardPage: React.FC = () => {
 
                     <button
                       onClick={handleOpenAddTcModal}
-                      className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-all"
+                      className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-colors"
                     >
                       <Plus className="w-3.5 h-3.5" />
-                      <span>+ เพิ่ม Test Case</span>
+                      <span>เพิ่ม Test Case</span>
                     </button>
                   </div>
 
@@ -1319,15 +1319,27 @@ export const AdminDashboardPage: React.FC = () => {
 
               <div className="space-y-1">
                 <label className="text-slate-300 font-medium">ระดับความยาก (Difficulty)</label>
-                <select
+                <CustomSelect
                   value={courseForm.difficulty}
-                  onChange={(e) => setCourseForm({ ...courseForm, difficulty: e.target.value as Difficulty })}
-                  className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-indigo-500"
-                >
-                  <option value="EASY">EASY (ง่าย)</option>
-                  <option value="MEDIUM">MEDIUM (ปานกลาง)</option>
-                  <option value="HARD">HARD (ยาก)</option>
-                </select>
+                  onChange={(val) => setCourseForm({ ...courseForm, difficulty: val as Difficulty })}
+                  options={[
+                    {
+                      value: "EASY",
+                      label: "EASY (ง่าย)",
+                      badge: <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">ง่าย</span>,
+                    },
+                    {
+                      value: "MEDIUM",
+                      label: "MEDIUM (ปานกลาง)",
+                      badge: <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">ปานกลาง</span>,
+                    },
+                    {
+                      value: "HARD",
+                      label: "HARD (ยาก)",
+                      badge: <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">ยาก</span>,
+                    },
+                  ]}
+                />
               </div>
 
               <div className="space-y-1">
@@ -1392,30 +1404,42 @@ export const AdminDashboardPage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-1">
                   <label className="text-slate-300 font-medium">สังกัดคอร์ส</label>
-                  <select
+                  <CustomSelect
                     value={problemForm.course_id}
-                    onChange={(e) => setProblemForm({ ...problemForm, course_id: parseInt(e.target.value) })}
-                    className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-indigo-500"
-                  >
-                    {courses.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.title}
-                      </option>
-                    ))}
-                  </select>
+                    onChange={(val) => setProblemForm({ ...problemForm, course_id: Number(val) })}
+                    placeholder="เลือกคอร์ส..."
+                    options={courses.map((c) => ({
+                      value: c.id,
+                      label: c.title,
+                      description: `slug: ${c.slug}`,
+                      badge: getDifficultyBadge(c.difficulty),
+                    }))}
+                  />
                 </div>
 
                 <div className="space-y-1">
                   <label className="text-slate-300 font-medium">ระดับความยาก</label>
-                  <select
+                  <CustomSelect
                     value={problemForm.difficulty}
-                    onChange={(e) => setProblemForm({ ...problemForm, difficulty: e.target.value as Difficulty })}
-                    className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-indigo-500"
-                  >
-                    <option value="EASY">EASY (ง่าย)</option>
-                    <option value="MEDIUM">MEDIUM (ปานกลาง)</option>
-                    <option value="HARD">HARD (ยาก)</option>
-                  </select>
+                    onChange={(val) => setProblemForm({ ...problemForm, difficulty: val as Difficulty })}
+                    options={[
+                      {
+                        value: "EASY",
+                        label: "EASY (ง่าย)",
+                        badge: <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">ง่าย</span>,
+                      },
+                      {
+                        value: "MEDIUM",
+                        label: "MEDIUM (ปานกลาง)",
+                        badge: <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">ปานกลาง</span>,
+                      },
+                      {
+                        value: "HARD",
+                        label: "HARD (ยาก)",
+                        badge: <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">ยาก</span>,
+                      },
+                    ]}
+                  />
                 </div>
               </div>
 
@@ -1638,14 +1662,24 @@ export const AdminDashboardPage: React.FC = () => {
 
                 <div className="space-y-1">
                   <label className="text-slate-300 font-medium">ประเภทการแสดงผล</label>
-                  <select
+                  <CustomSelect
                     value={tcForm.is_hidden ? "true" : "false"}
-                    onChange={(e) => setTcForm({ ...tcForm, is_hidden: e.target.value === "true" })}
-                    className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-indigo-500"
-                  >
-                    <option value="false">ตัวอย่าง (Sample - แสดงให้เห็น)</option>
-                    <option value="true">ลับ (Hidden - ใช้ตรวจจริง)</option>
-                  </select>
+                    onChange={(val) => setTcForm({ ...tcForm, is_hidden: val === "true" })}
+                    options={[
+                      {
+                        value: "false",
+                        label: "ตัวอย่าง (Sample - แสดงให้เห็น)",
+                        description: "แสดงให้นักเรียนเห็นเป็นตัวอย่างในหน้าโจทย์",
+                        badge: <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Sample</span>,
+                      },
+                      {
+                        value: "true",
+                        label: "ลับ (Hidden - ใช้ตรวจจริง)",
+                        description: "ซ่อนไม่ให้นักเรียนเห็น ใช้สำหรับการส่งตรวจจริง",
+                        badge: <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-slate-500/10 text-slate-400 border border-slate-500/20">Hidden</span>,
+                      },
+                    ]}
+                  />
                 </div>
               </div>
 
