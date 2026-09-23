@@ -1,3 +1,7 @@
+import os
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
 from app.core.database import SessionLocal
 from app.models.user import User, UserRole
 from app.models.course import Course, Difficulty

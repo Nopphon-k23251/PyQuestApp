@@ -3,6 +3,10 @@ Seed or update the database with comprehensive Thai fundamental Python problems.
 Safe and idempotent: updates existing problems if slug matches, or adds new ones with complete test cases.
 """
 
+import os
+import sys
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
+
 from app.core.database import SessionLocal
 from app.models.course import Course, Difficulty
 from app.models.problem import Problem
