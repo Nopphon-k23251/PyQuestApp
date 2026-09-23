@@ -23,6 +23,7 @@ import { submissionApi } from "../services/api/submissionApi";
 import { useAuth } from "../features/auth/AuthContext";
 import { Problem, Submission, SubmissionStatus } from "../types";
 import { LocalExecutionConsentModal } from "../components/feedback/LocalExecutionConsentModal";
+import { CodeEditor } from "../components/editor/CodeEditor";
 
 const DEFAULT_PYTHON_TEMPLATE = `# Write your Python solution below
 import sys
@@ -309,9 +310,9 @@ export const ProblemPage: React.FC = () => {
       </div>
 
       {/* Main Split Workspace */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-[calc(100vh-10.5rem)] min-h-[600px]">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 h-auto lg:h-[calc(100vh-8.5rem)] lg:min-h-[620px]">
         {/* LEFT PANE: Problem Description & Samples */}
-        <div className="lg:col-span-5 flex flex-col rounded-2xl glass-panel border border-white/5 overflow-hidden">
+        <div className="lg:col-span-5 h-[480px] lg:h-full flex flex-col rounded-2xl glass-panel border border-white/5 overflow-hidden">
           {/* Left Tabs */}
           <div className="flex items-center border-b border-white/5 bg-slate-900/60 px-2 pt-2 space-x-1">
             <button
@@ -505,7 +506,7 @@ export const ProblemPage: React.FC = () => {
         </div>
 
         {/* RIGHT PANE: Code Editor & Console */}
-        <div className="lg:col-span-7 flex flex-col rounded-2xl glass-panel border border-white/5 overflow-hidden">
+        <div className="lg:col-span-7 h-[650px] lg:h-full flex flex-col rounded-2xl glass-panel border border-white/5 overflow-hidden">
           {/* Editor Header Toolbar */}
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/5 bg-slate-900/70">
             <div className="flex items-center space-x-2">
@@ -547,28 +548,13 @@ export const ProblemPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Interactive Code Editor with Line Numbers */}
-          <div className="flex-1 flex min-h-[280px] bg-[#070a12] relative overflow-hidden">
-            {/* Line numbers gutter */}
-            <div className="w-12 py-3 bg-[#05070c] border-r border-white/5 text-slate-600 font-mono text-xs text-right pr-3 select-none">
-              {Array.from({ length: Math.max(12, lineCount) }).map((_, i) => (
-                <div key={i} className="leading-6">
-                  {i + 1}
-                </div>
-              ))}
-            </div>
-
-            {/* Textarea Code Input */}
-            <textarea
-              ref={textareaRef}
+          {/* Interactive Monaco Code Editor with Python Syntax Highlighting & Autocomplete */}
+          <div className="flex-1 min-h-[320px] relative overflow-hidden p-2 bg-[#060810]">
+            <CodeEditor
               value={code}
-              onChange={(e) => setCode(e.target.value)}
-              onKeyDown={handleKeyDown}
-              spellCheck={false}
-              autoCapitalize="off"
-              autoComplete="off"
-              className="flex-1 p-3 bg-transparent text-slate-100 font-mono text-xs leading-6 resize-none focus:outline-none selection:bg-indigo-500/30 overflow-y-auto"
-              placeholder="# เขียนโค้ดภาษา Python ที่นี่..."
+              onChange={setCode}
+              language="python"
+              onRun={handleRun}
             />
           </div>
 

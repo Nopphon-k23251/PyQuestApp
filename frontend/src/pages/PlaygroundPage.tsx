@@ -19,6 +19,7 @@ import {
 import { playgroundApi } from "../services/api/playgroundApi";
 import { CodeRunResult } from "../services/api/problemApi";
 import { LocalExecutionConsentModal } from "../components/feedback/LocalExecutionConsentModal";
+import { CodeEditor } from "../components/editor/CodeEditor";
 
 interface Snippet {
   name: string;
@@ -333,9 +334,9 @@ export const PlaygroundPage: React.FC = () => {
       </div>
 
       {/* Main Split Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 h-[calc(100vh-13.5rem)] min-h-[640px]">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 h-auto lg:h-[calc(100vh-13.5rem)] lg:min-h-[640px]">
         {/* LEFT / CENTER: Code Editor (7 cols) */}
-        <div className="lg:col-span-7 flex flex-col rounded-2xl glass-panel border border-white/10 overflow-hidden shadow-2xl">
+        <div className="lg:col-span-7 h-[550px] lg:h-full flex flex-col rounded-2xl glass-panel border border-white/10 overflow-hidden shadow-2xl">
           {/* Editor Header Bar */}
           <div className="flex items-center justify-between px-4 py-2.5 bg-slate-900/80 border-b border-white/5">
             <div className="flex items-center space-x-2">
@@ -401,28 +402,13 @@ export const PlaygroundPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Editor Body */}
-          <div className="flex-1 flex bg-[#060911] relative overflow-hidden">
-            {/* Gutter */}
-            <div className="w-12 py-3 bg-[#04060c] border-r border-white/5 text-slate-600 font-mono text-xs text-right pr-3 select-none">
-              {Array.from({ length: Math.max(18, lineCount) }).map((_, i) => (
-                <div key={i} className="leading-6">
-                  {i + 1}
-                </div>
-              ))}
-            </div>
-
-            {/* Textarea */}
-            <textarea
-              ref={textareaRef}
+          {/* Monaco Editor Body */}
+          <div className="flex-1 min-h-[450px] relative overflow-hidden p-2 bg-[#060911]">
+            <CodeEditor
               value={code}
-              onChange={(e) => setCode(e.target.value)}
-              onKeyDown={handleKeyDown}
-              spellCheck={false}
-              autoCapitalize="off"
-              autoComplete="off"
-              placeholder="# เขียนโค้ดภาษา Python ที่นี่..."
-              className="flex-1 p-3 bg-transparent text-slate-100 font-mono text-xs leading-6 resize-none focus:outline-none selection:bg-indigo-500/30 overflow-y-auto"
+              onChange={setCode}
+              language="python"
+              onRun={handleRun}
             />
           </div>
         </div>
