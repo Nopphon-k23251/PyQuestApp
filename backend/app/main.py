@@ -22,6 +22,17 @@ async def lifespan(app: FastAPI):
     # Ensure database schema is created on startup
     Base.metadata.create_all(bind=engine)
     try:
+        import sqlalchemy as sa
+        with engine.connect() as conn:
+            for col in ["passed_test_cases", "total_test_cases"]:
+                try:
+                    conn.execute(sa.text(f"ALTER TABLE submissions ADD COLUMN {col} INTEGER DEFAULT 0"))
+                    conn.commit()
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    try:
         from app.core.seed_data import seed_database
         seed_database()
     except Exception as e:

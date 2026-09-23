@@ -106,6 +106,10 @@ export interface Submission {
   memoryUsedMb?: number | null;
   errorCode?: string | null;
   code?: string | null;
+  passedTestCases?: number;
+  totalTestCases?: number;
+  passed_test_cases?: number;
+  total_test_cases?: number;
   createdAt: string;
 }
 

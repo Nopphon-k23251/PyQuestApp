@@ -28,6 +28,8 @@ class Submission(Base):
     execution_time_ms = Column(Integer, nullable=True)
     memory_used_mb = Column(Integer, nullable=True)
     error_code = Column(String(50), nullable=True)
+    passed_test_cases = Column(Integer, nullable=False, default=0)
+    total_test_cases = Column(Integer, nullable=False, default=0)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     __table_args__ = (

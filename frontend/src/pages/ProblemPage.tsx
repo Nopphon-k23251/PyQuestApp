@@ -473,15 +473,22 @@ export const ProblemPage: React.FC = () => {
                             <XCircle className="w-4 h-4 text-rose-400" />
                           )}
                           <div>
-                            <span
-                              className={`text-xs font-bold ${
-                                sub.status === "ACCEPTED"
-                                  ? "text-emerald-400"
-                                  : "text-rose-400"
-                              }`}
-                            >
-                              {sub.status}
-                            </span>
+                            <div className="flex items-center space-x-2">
+                              <span
+                                className={`text-xs font-bold ${
+                                  sub.status === "ACCEPTED"
+                                    ? "text-emerald-400"
+                                    : "text-rose-400"
+                                }`}
+                              >
+                                {sub.status}
+                              </span>
+                              {(sub.totalTestCases || sub.total_test_cases) ? (
+                                <span className="px-1.5 py-0.5 text-[10px] font-mono rounded bg-white/5 text-slate-300 border border-white/10">
+                                  {sub.passedTestCases ?? sub.passed_test_cases ?? 0}/{sub.totalTestCases ?? sub.total_test_cases} ผ่าน
+                                </span>
+                              ) : null}
+                            </div>
                             <span className="text-[10px] text-slate-500 block">
                               {new Date(sub.createdAt).toLocaleString()}
                             </span>
@@ -662,38 +669,79 @@ export const ProblemPage: React.FC = () => {
                       <span>กำลังส่งและตรวจคำตอบกับระบบ Sandbox...</span>
                     </div>
                   ) : submissionVerdict ? (
-                    <div
-                      className={`p-4 rounded-xl border space-y-2 ${
-                        submissionVerdict.status === "ACCEPTED"
-                          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300 glow-emerald"
-                          : "bg-rose-500/10 border-rose-500/30 text-rose-300 glow-rose"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          {submissionVerdict.status === "ACCEPTED" ? (
-                            <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                          ) : (
-                            <XCircle className="w-5 h-5 text-rose-400" />
-                          )}
-                          <span className="text-base font-bold">
-                            {submissionVerdict.status}
-                          </span>
-                        </div>
-                        <span className="text-sm font-bold">
-                          +{submissionVerdict.score} คะแนน
-                        </span>
-                      </div>
+                    (() => {
+                      const passedCount = submissionVerdict.passedTestCases ?? submissionVerdict.passed_test_cases ?? (submissionVerdict.status === "ACCEPTED" ? 1 : 0);
+                      const totalCount = submissionVerdict.totalTestCases ?? submissionVerdict.total_test_cases ?? 1;
+                      const percentage = totalCount > 0 ? Math.round((passedCount / totalCount) * 100) : (submissionVerdict.status === "ACCEPTED" ? 100 : 0);
 
-                      <div className="flex items-center space-x-4 text-[11px] text-slate-400 font-sans pt-1 border-t border-white/5">
-                        <span>เวลาทำงาน: {submissionVerdict.executionTimeMs ?? 0} ms</span>
-                        <span>
-                          {submissionVerdict.status === "ACCEPTED"
-                            ? "ผ่านการตรวจสอบครบทุก Test Cases!"
-                            : "ผลลัพธ์ยังไม่ถูกต้อง ลองตรวจทานเงื่อนไขและส่งอีกครั้ง"}
-                        </span>
-                      </div>
-                    </div>
+                      return (
+                        <div
+                          className={`p-4 rounded-xl border space-y-3 ${
+                            submissionVerdict.status === "ACCEPTED"
+                              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-300 glow-emerald"
+                              : "bg-rose-500/10 border-rose-500/30 text-rose-300 glow-rose"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center space-x-2.5">
+                              {submissionVerdict.status === "ACCEPTED" ? (
+                                <CheckCircle2 className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+                              ) : (
+                                <XCircle className="w-5 h-5 text-rose-400 flex-shrink-0" />
+                              )}
+                              <div>
+                                <div className="flex items-center space-x-2">
+                                  <span className="text-base font-bold">
+                                    {submissionVerdict.status}
+                                  </span>
+                                  {totalCount > 0 && (
+                                    <span
+                                      className={`px-2 py-0.5 rounded-full text-xs font-semibold font-mono border ${
+                                        submissionVerdict.status === "ACCEPTED"
+                                          ? "bg-emerald-500/20 text-emerald-300 border-emerald-500/40"
+                                          : "bg-rose-500/20 text-rose-300 border-rose-500/40"
+                                      }`}
+                                    >
+                                      ผ่าน {passedCount} / {totalCount} Test Cases
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-[11px] text-slate-400 block mt-0.5 font-sans">
+                                  {submissionVerdict.status === "ACCEPTED"
+                                    ? `ผ่านการตรวจสอบครบทุก Test Cases (${totalCount}/${totalCount})`
+                                    : `ผ่าน ${passedCount} จากทั้งหมด ${totalCount} Test Cases (${percentage}%)`}
+                                </span>
+                              </div>
+                            </div>
+
+                            <div className="text-right">
+                              <span className="text-sm font-bold text-white block">
+                                +{submissionVerdict.score} คะแนน
+                              </span>
+                              <span className="text-[11px] text-slate-400 font-sans">
+                                ⏱️ {submissionVerdict.executionTimeMs ?? 0} ms
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Visual Progress Bar */}
+                          {totalCount > 0 && (
+                            <div className="space-y-1 pt-1">
+                              <div className="w-full h-2 rounded-full bg-black/40 overflow-hidden border border-white/5">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-500 ${
+                                    submissionVerdict.status === "ACCEPTED"
+                                      ? "bg-gradient-to-r from-emerald-500 to-teal-400"
+                                      : "bg-gradient-to-r from-amber-500 to-rose-500"
+                                  }`}
+                                  style={{ width: `${Math.min(100, Math.max(0, percentage))}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()
                   ) : (
                     <p className="text-slate-600 italic">
                       กดปุ่ม "ส่งตรวจ (Submit)" เพื่อให้ระบบตรวจคำตอบกับชุดทดสอบทั้งหมด

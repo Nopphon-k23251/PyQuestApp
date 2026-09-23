@@ -78,6 +78,8 @@ class SubmissionService:
             memory_used_mb=submission.memory_used_mb,
             error_code=submission.error_code,
             code=submission.code,
+            passed_test_cases=submission.passed_test_cases or 0,
+            total_test_cases=submission.total_test_cases or 0,
             created_at=submission.created_at,
         )
 
@@ -119,6 +121,8 @@ class SubmissionService:
                     memory_used_mb=s.memory_used_mb,
                     error_code=s.error_code,
                     code=s.code,
+                    passed_test_cases=s.passed_test_cases or 0,
+                    total_test_cases=s.total_test_cases or 0,
                     created_at=s.created_at,
                 )
             )
@@ -165,6 +169,8 @@ class SubmissionService:
                     memory_used_mb=s.memory_used_mb,
                     error_code=s.error_code,
                     code=s.code,
+                    passed_test_cases=s.passed_test_cases or 0,
+                    total_test_cases=s.total_test_cases or 0,
                     created_at=s.created_at,
                 )
             )

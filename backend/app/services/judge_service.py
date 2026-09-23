@@ -201,6 +201,8 @@ class JudgeService:
         submission.status = SubmissionStatus.RUNNING.value
         self.db.commit()
 
+        total_test_cases = len(test_cases)
+        passed_test_cases = 0
         final_status = SubmissionStatus.ACCEPTED
         max_exec_time = 0
         failed_error_code = None
@@ -216,15 +218,21 @@ class JudgeService:
             max_exec_time = max(max_exec_time, res.execution_time_ms)
 
             if res.status != SubmissionStatus.ACCEPTED:
-                final_status = res.status
-                failed_error_code = res.error_code
-                break
+                if final_status == SubmissionStatus.ACCEPTED:
+                    final_status = res.status
+                    failed_error_code = res.error_code
+                if res.status == SubmissionStatus.TIME_LIMIT:
+                    break
+                continue
 
             # Compare stdout against expected output
             if not self.comparator.compare(res.stdout, tc.expected_output):
-                final_status = SubmissionStatus.WRONG_ANSWER
-                failed_error_code = "WRONG_ANSWER"
-                break
+                if final_status == SubmissionStatus.ACCEPTED:
+                    final_status = SubmissionStatus.WRONG_ANSWER
+                    failed_error_code = "WRONG_ANSWER"
+                continue
+
+            passed_test_cases += 1
 
         # Calculate score based on final status
         score = problem.points if final_status == SubmissionStatus.ACCEPTED else 0
@@ -235,6 +243,8 @@ class JudgeService:
             submission.score = score
             submission.execution_time_ms = max_exec_time
             submission.error_code = failed_error_code
+            submission.passed_test_cases = passed_test_cases
+            submission.total_test_cases = total_test_cases
 
             if final_status == SubmissionStatus.ACCEPTED:
                 # Check or create user progress

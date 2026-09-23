@@ -1170,15 +1170,22 @@ export const AdminDashboardPage: React.FC = () => {
                           <td className="py-3 px-4 font-sans font-medium text-white">{sub.userId}</td>
                           <td className="py-3 px-4 font-sans text-indigo-300">Problem #{sub.problemId}</td>
                           <td className="py-3 px-4 font-sans">
-                            <span
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                sub.status === "ACCEPTED"
-                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                                  : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
-                              }`}
-                            >
-                              {sub.status}
-                            </span>
+                            <div className="flex items-center space-x-1.5">
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  sub.status === "ACCEPTED"
+                                    ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                    : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                                }`}
+                              >
+                                {sub.status}
+                              </span>
+                              {(sub.totalTestCases || sub.total_test_cases) ? (
+                                <span className="text-[10px] font-mono text-slate-400">
+                                  ({sub.passedTestCases ?? sub.passed_test_cases ?? 0}/{sub.totalTestCases ?? sub.total_test_cases})
+                                </span>
+                              ) : null}
+                            </div>
                           </td>
                           <td className="py-3 px-4 text-slate-400">{sub.executionTimeMs ?? 0} ms</td>
                           <td className="py-3 px-4 font-sans text-[11px] text-slate-500">
@@ -1713,7 +1720,14 @@ export const AdminDashboardPage: React.FC = () => {
             <div className="flex items-center justify-between pb-3 border-b border-white/10">
               <div>
                 <h3 className="text-base font-bold text-white">Submission #{codeViewerModal.id} Source Code</h3>
-                <span className="text-xs text-slate-400">สถานะ: {codeViewerModal.status}</span>
+                <div className="flex items-center space-x-2 text-xs text-slate-400 mt-0.5">
+                  <span>สถานะ: {codeViewerModal.status}</span>
+                  {(codeViewerModal.totalTestCases || codeViewerModal.total_test_cases) ? (
+                    <span className="font-mono text-indigo-300">
+                      (ผ่าน {codeViewerModal.passedTestCases ?? codeViewerModal.passed_test_cases ?? 0}/{codeViewerModal.totalTestCases ?? codeViewerModal.total_test_cases} Test Cases)
+                    </span>
+                  ) : null}
+                </div>
               </div>
               <button onClick={() => setCodeViewerModal(null)} className="p-1 text-slate-400 hover:text-white">
                 <X className="w-4 h-4" />

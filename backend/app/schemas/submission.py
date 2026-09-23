@@ -23,6 +23,8 @@ class SubmissionCreate(BaseModel):
 class SubmissionSubmitResponse(BaseModel):
     submission_id: int
     status: SubmissionStatus
+    passed_test_cases: int = 0
+    total_test_cases: int = 0
 
 
 class SubmissionResponse(BaseModel):
@@ -37,6 +39,8 @@ class SubmissionResponse(BaseModel):
     memory_used_mb: Optional[int] = None
     error_code: Optional[str] = None
     code: Optional[str] = None
+    passed_test_cases: int = 0
+    total_test_cases: int = 0
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)

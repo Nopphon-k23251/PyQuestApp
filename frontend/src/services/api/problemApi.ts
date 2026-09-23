@@ -11,6 +11,10 @@ export interface CodeRunResult {
 export interface SubmitResult {
   submission_id: number;
   status: SubmissionStatus;
+  passedTestCases?: number;
+  totalTestCases?: number;
+  passed_test_cases?: number;
+  total_test_cases?: number;
 }
 
 export const problemApi = {

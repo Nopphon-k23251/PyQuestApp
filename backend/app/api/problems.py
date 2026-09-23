@@ -130,6 +130,8 @@ async def submit_code_solution(
         data=SubmissionSubmitResponse(
             submission_id=submission.id,
             status=submission.status,
+            passed_test_cases=submission.passed_test_cases or 0,
+            total_test_cases=submission.total_test_cases or 0,
         ),
     )
 
