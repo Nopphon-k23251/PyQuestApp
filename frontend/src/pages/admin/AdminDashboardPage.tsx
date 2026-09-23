@@ -1,10 +1,14 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
+import { Link } from "react-router-dom";
 import {
   ShieldAlert,
-  BookOpen,
-  Code2,
-  ListOrdered,
+  Folder,
+  FolderOpen,
+  FileCode,
   Plus,
+  Search,
+  ChevronRight,
+  ChevronDown,
   Edit2,
   Trash2,
   Eye,
@@ -13,11 +17,17 @@ import {
   XCircle,
   Clock,
   Layers,
-  FileCode,
   Sparkles,
+  RefreshCw,
+  X,
+  ExternalLink,
+  Code2,
+  ListOrdered,
+  FileText,
+  AlertCircle,
+  CheckCircle2,
 } from "lucide-react";
 import { adminApi } from "../../services/api/adminApi";
-import { courseApi } from "../../services/api/courseApi";
 import {
   Course,
   ProblemAdminItem,
@@ -25,19 +35,44 @@ import {
   Submission,
   Difficulty,
 } from "../../types";
+import { ConfirmModal, ConfirmModalType } from "../../components/feedback/ConfirmModal";
 
 export const AdminDashboardPage: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<"courses" | "problems" | "testcases" | "submissions">("courses");
+  // Navigation / Selection State
+  const [activeView, setActiveView] = useState<"overview" | "course" | "problem" | "submissions">("overview");
+  const [selectedCourseId, setSelectedCourseId] = useState<number | null>(null);
+  const [selectedProblemId, setSelectedProblemId] = useState<number | null>(null);
+  const [expandedCourses, setExpandedCourses] = useState<Record<number, boolean>>({});
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Data states
   const [courses, setCourses] = useState<Course[]>([]);
   const [problems, setProblems] = useState<ProblemAdminItem[]>([]);
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
-  const [selectedProblemId, setSelectedProblemId] = useState<number | null>(null);
   const [testCases, setTestCases] = useState<TestCase[]>([]);
+  const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
+  const [problemTab, setProblemTab] = useState<"specs" | "testcases">("specs");
 
-  // Modals
+  // Toast / Alert Notification
+  const [toast, setToast] = useState<{ type: "success" | "error" | "info"; message: string } | null>(null);
+
+  // Custom Confirm Modal State
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    confirmText?: string;
+    type?: ConfirmModalType;
+    loading?: boolean;
+    onConfirm: () => void;
+  }>({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: () => {},
+  });
+
+  // Modal Forms
   const [courseModalOpen, setCourseModalOpen] = useState(false);
   const [editingCourse, setEditingCourse] = useState<Course | null>(null);
   const [courseForm, setCourseForm] = useState({
@@ -78,36 +113,96 @@ export const AdminDashboardPage: React.FC = () => {
 
   const [codeViewerModal, setCodeViewerModal] = useState<Submission | null>(null);
 
+  // Auto-hide toast after 4s
   useEffect(() => {
-    loadAllAdminData();
-  }, [activeTab]);
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
-  const loadAllAdminData = async () => {
+  // Initial Load
+  useEffect(() => {
+    loadAllData();
+  }, []);
+
+  const showToast = (message: string, type: "success" | "error" | "info" = "success") => {
+    setToast({ type, message });
+  };
+
+  const loadAllData = async () => {
     setLoading(true);
     try {
-      if (activeTab === "courses") {
-        const cRes = await adminApi.listCourses(1, 100);
-        setCourses(cRes?.items || []);
-      } else if (activeTab === "problems") {
-        const pRes = await adminApi.listProblems();
-        setProblems(Array.isArray(pRes) ? pRes : (pRes as any)?.items || []);
-      } else if (activeTab === "testcases" && selectedProblemId) {
-        const tcRes = await adminApi.getTestCases(selectedProblemId);
-        setTestCases(Array.isArray(tcRes) ? tcRes : []);
-      } else if (activeTab === "submissions") {
-        const sRes = await adminApi.inspectSubmissions(1, 50);
-        setSubmissions(sRes?.items || []);
-      }
-    } catch (err) {
+      const [cRes, pRes, sRes] = await Promise.all([
+        adminApi.listCourses(1, 100),
+        adminApi.listProblems(),
+        adminApi.inspectSubmissions(1, 50),
+      ]);
+      const loadedCourses = cRes?.items || [];
+      const loadedProblems = Array.isArray(pRes) ? pRes : (pRes as any)?.items || [];
+      setCourses(loadedCourses);
+      setProblems(loadedProblems);
+      setSubmissions(sRes?.items || []);
+
+      // Auto-expand all courses initially
+      const initialExpanded: Record<number, boolean> = {};
+      loadedCourses.forEach((c) => {
+        initialExpanded[c.id] = true;
+      });
+      setExpandedCourses((prev) => ({ ...initialExpanded, ...prev }));
+    } catch (err: any) {
       console.error("Admin data load error:", err);
-      setCourses([]);
-      setProblems([]);
-      setTestCases([]);
-      setSubmissions([]);
+      showToast(err.message || "เกิดข้อผิดพลาดในการโหลดข้อมูล", "error");
     } finally {
       setLoading(false);
     }
   };
+
+  const toggleCourseExpand = (courseId: number, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setExpandedCourses((prev) => ({ ...prev, [courseId]: !prev[courseId] }));
+  };
+
+  // Selected entities
+  const selectedCourse = useMemo(() => {
+    return courses.find((c) => c.id === selectedCourseId) || null;
+  }, [courses, selectedCourseId]);
+
+  const selectedProblem = useMemo(() => {
+    return problems.find((p) => p.id === selectedProblemId) || null;
+  }, [problems, selectedProblemId]);
+
+  const selectCourse = (course: Course) => {
+    setSelectedCourseId(course.id);
+    setSelectedProblemId(null);
+    setActiveView("course");
+  };
+
+  const selectProblem = async (problem: ProblemAdminItem) => {
+    setSelectedProblemId(problem.id);
+    setSelectedCourseId(problem.courseId);
+    setActiveView("problem");
+    setProblemTab("specs");
+    try {
+      const tcRes = await adminApi.getTestCases(problem.id);
+      setTestCases(tcRes || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  // Filtered Tree Items based on search
+  const filteredCourses = useMemo(() => {
+    if (!searchQuery.trim()) return courses;
+    const q = searchQuery.toLowerCase();
+    return courses.filter((c) => {
+      const matchCourse = c.title.toLowerCase().includes(q) || c.slug.toLowerCase().includes(q);
+      const matchProblems = problems.some(
+        (p) => p.courseId === c.id && (p.title.toLowerCase().includes(q) || p.slug.toLowerCase().includes(q))
+      );
+      return matchCourse || matchProblems;
+    });
+  }, [courses, problems, searchQuery]);
 
   // --- Course handlers ---
   const handleOpenCourseModal = (course?: Course) => {
@@ -127,7 +222,7 @@ export const AdminDashboardPage: React.FC = () => {
         slug: "",
         description: "",
         difficulty: "EASY",
-        is_published: false,
+        is_published: true,
       });
     }
     setCourseModalOpen(true);
@@ -138,28 +233,58 @@ export const AdminDashboardPage: React.FC = () => {
     try {
       if (editingCourse) {
         await adminApi.updateCourse(editingCourse.id, courseForm);
+        showToast("บันทึกการแก้ไขคอร์สเรียบร้อยแล้ว");
       } else {
         await adminApi.createCourse(courseForm);
+        showToast("สร้างคอร์สใหม่เรียบร้อยแล้ว");
       }
       setCourseModalOpen(false);
-      loadAllAdminData();
+      loadAllData();
     } catch (err: any) {
-      alert(err.message || "Failed to save course");
+      showToast(err.message || "ไม่สามารถบันทึกคอร์สได้", "error");
     }
   };
 
-  const handleDeleteCourse = async (id: number) => {
-    if (!confirm("ต้องการลบคอร์สนี้ใช่หรือไม่?")) return;
+  const triggerDeleteCourse = (course: Course, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setConfirmModal({
+      isOpen: true,
+      title: "ยืนยันการลบคอร์ส",
+      message: `คุณแน่ใจหรือไม่ว่าต้องการลบคอร์ส "${course.title}"? โจทย์ทั้งหมดในคอร์สนี้จะได้รับผลกระทบ`,
+      confirmText: "ลบคอร์ส",
+      type: "danger",
+      onConfirm: async () => {
+        try {
+          await adminApi.deleteCourse(course.id);
+          showToast(`ลบคอร์ส "${course.title}" เรียบร้อยแล้ว`);
+          if (selectedCourseId === course.id) {
+            setSelectedCourseId(null);
+            setSelectedProblemId(null);
+            setActiveView("overview");
+          }
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+          loadAllData();
+        } catch (err: any) {
+          showToast(err.message || "ไม่สามารถลบคอร์สได้", "error");
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
+  };
+
+  const handleTogglePublishCourse = async (course: Course, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     try {
-      await adminApi.deleteCourse(id);
-      loadAllAdminData();
+      await adminApi.updateCourse(course.id, { is_published: !course.isPublished });
+      showToast(`เปลี่ยนสถานะเป็น ${!course.isPublished ? "เผยแพร่แล้ว (Published)" : "ฉบับร่าง (Draft)"}`);
+      loadAllData();
     } catch (err: any) {
-      alert(err.message || "Failed to delete course");
+      showToast(err.message || "ไม่สามารถเปลี่ยนสถานะได้", "error");
     }
   };
 
   // --- Problem handlers ---
-  const handleOpenProblemModal = (problem?: ProblemAdminItem) => {
+  const handleOpenProblemModal = (problem?: ProblemAdminItem, defaultCourseId?: number) => {
     if (problem) {
       setEditingProblem(problem);
       setProblemForm({
@@ -181,7 +306,7 @@ export const AdminDashboardPage: React.FC = () => {
     } else {
       setEditingProblem(null);
       setProblemForm({
-        course_id: courses[0]?.id || 1,
+        course_id: defaultCourseId || selectedCourseId || courses[0]?.id || 1,
         title: "",
         slug: "",
         description: "",
@@ -192,7 +317,7 @@ export const AdminDashboardPage: React.FC = () => {
         points: 10,
         time_limit_ms: 1000,
         memory_limit_mb: 128,
-        is_published: false,
+        is_published: true,
         sample_input: "",
         sample_output: "",
       });
@@ -206,9 +331,9 @@ export const AdminDashboardPage: React.FC = () => {
       const { sample_input, sample_output, ...payload } = problemForm;
       if (editingProblem) {
         await adminApi.updateProblem(editingProblem.id, payload);
+        showToast("บันทึกการแก้ไขโจทย์เรียบร้อยแล้ว");
       } else {
         const created = await adminApi.createProblem(payload);
-        // If sample input or expected output was provided, auto-create the sample testcase!
         if (created?.id && (sample_input || sample_output)) {
           try {
             await adminApi.createTestCase(created.id, {
@@ -221,36 +346,53 @@ export const AdminDashboardPage: React.FC = () => {
             console.warn("Failed to auto-create sample testcase:", tcErr);
           }
         }
+        showToast("สร้างโจทย์ใหม่เรียบร้อยแล้ว");
       }
       setProblemModalOpen(false);
-      loadAllAdminData();
+      loadAllData();
     } catch (err: any) {
-      alert(err.message || "Failed to save problem");
+      showToast(err.message || "ไม่สามารถบันทึกโจทย์ได้", "error");
     }
   };
 
-  const handleDeleteProblem = async (id: number) => {
-    if (!confirm("ต้องการลบโจทย์นี้ใช่หรือไม่?")) return;
+  const triggerDeleteProblem = (problem: ProblemAdminItem, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setConfirmModal({
+      isOpen: true,
+      title: "ยืนยันการลบโจทย์",
+      message: `คุณแน่ใจหรือไม่ว่าต้องการลบโจทย์ "${problem.title}"? ชุด Test Cases และประวัติการส่งทั้งหมดของโจทย์นี้จะถูกลบออกด้วย`,
+      confirmText: "ลบโจทย์",
+      type: "danger",
+      onConfirm: async () => {
+        try {
+          await adminApi.deleteProblem(problem.id);
+          showToast(`ลบโจทย์ "${problem.title}" เรียบร้อยแล้ว`);
+          if (selectedProblemId === problem.id) {
+            setSelectedProblemId(null);
+            setActiveView(selectedCourseId ? "course" : "overview");
+          }
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+          loadAllData();
+        } catch (err: any) {
+          showToast(err.message || "ไม่สามารถลบโจทย์ได้", "error");
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
+  };
+
+  const handleTogglePublishProblem = async (problem: ProblemAdminItem, e?: React.MouseEvent) => {
+    e?.stopPropagation();
     try {
-      await adminApi.deleteProblem(id);
-      loadAllAdminData();
+      await adminApi.updateProblem(problem.id, { is_published: !problem.isPublished });
+      showToast(`เปลี่ยนสถานะโจทย์เป็น ${!problem.isPublished ? "เผยแพร่แล้ว (Published)" : "ฉบับร่าง (Draft)"}`);
+      loadAllData();
     } catch (err: any) {
-      alert(err.message || "Failed to delete problem");
+      showToast(err.message || "ไม่สามารถเปลี่ยนสถานะได้", "error");
     }
   };
 
   // --- Test Case handlers ---
-  const handleSelectProblemForTestCases = async (probId: number) => {
-    setSelectedProblemId(probId);
-    setActiveTab("testcases");
-    try {
-      const tcRes = await adminApi.getTestCases(probId);
-      setTestCases(tcRes);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
   const handleToggleTcVisibility = async (tc: TestCase) => {
     try {
       const newHiddenState = !tc.isHidden;
@@ -259,8 +401,9 @@ export const AdminDashboardPage: React.FC = () => {
         const updated = await adminApi.getTestCases(selectedProblemId);
         setTestCases(updated);
       }
+      showToast(newHiddenState ? "เปลี่ยนเป็น Test Case ลับ (Hidden)" : "เปลี่ยนเป็น Test Case ตัวอย่าง (Sample)");
     } catch (err: any) {
-      alert(err.message || "Failed to update test case visibility");
+      showToast(err.message || "ไม่สามารถเปลี่ยนประเภท Test Case ได้", "error");
     }
   };
 
@@ -269,7 +412,7 @@ export const AdminDashboardPage: React.FC = () => {
     setTcForm({
       input_data: "",
       expected_output: "",
-      is_hidden: false, // Default to Sample (ตัวอย่าง)
+      is_hidden: false,
       points: 5,
     });
     setTcModalOpen(true);
@@ -292,498 +435,936 @@ export const AdminDashboardPage: React.FC = () => {
     try {
       if (editingTc) {
         await adminApi.updateTestCase(editingTc.id, tcForm);
+        showToast("บันทึกการแก้ไข Test Case เรียบร้อยแล้ว");
       } else {
         await adminApi.createTestCase(selectedProblemId, tcForm);
+        showToast("เพิ่ม Test Case ใหม่เรียบร้อยแล้ว");
       }
       setTcModalOpen(false);
       setEditingTc(null);
-      setTcForm({ input_data: "", expected_output: "", is_hidden: false, points: 5 });
       const updated = await adminApi.getTestCases(selectedProblemId);
       setTestCases(updated);
     } catch (err: any) {
-      alert(err.message || "Failed to save testcase");
+      showToast(err.message || "ไม่สามารถบันทึก Test Case ได้", "error");
     }
   };
 
-  const handleDeleteTestCase = async (tcId: number) => {
-    if (!confirm("ต้องการลบ Test Case นี้ใช่หรือไม่?")) return;
-    try {
-      await adminApi.deleteTestCase(tcId);
-      if (selectedProblemId) {
-        const updated = await adminApi.getTestCases(selectedProblemId);
-        setTestCases(updated);
-      }
-    } catch (err: any) {
-      alert(err.message || "Failed to delete testcase");
+  const triggerDeleteTestCase = (tcId: number) => {
+    setConfirmModal({
+      isOpen: true,
+      title: "ยืนยันการลบ Test Case",
+      message: "คุณแน่ใจหรือไม่ว่าต้องการลบชุดทดสอบ (Test Case) นี้ออกจากระบบ?",
+      confirmText: "ลบ Test Case",
+      type: "danger",
+      onConfirm: async () => {
+        try {
+          await adminApi.deleteTestCase(tcId);
+          showToast("ลบ Test Case เรียบร้อยแล้ว");
+          if (selectedProblemId) {
+            const updated = await adminApi.getTestCases(selectedProblemId);
+            setTestCases(updated);
+          }
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        } catch (err: any) {
+          showToast(err.message || "ไม่สามารถลบ Test Case ได้", "error");
+          setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+        }
+      },
+    });
+  };
+
+  const getDifficultyBadge = (diff: Difficulty) => {
+    switch (diff) {
+      case "EASY":
+        return <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">EASY</span>;
+      case "MEDIUM":
+        return <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">MED</span>;
+      case "HARD":
+        return <span className="px-2 py-0.5 text-[10px] font-bold rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">HARD</span>;
+      default:
+        return null;
     }
   };
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
-      {/* Admin Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-white/5">
-        <div>
-          <div className="flex items-center space-x-2 text-rose-400 font-semibold text-xs uppercase tracking-wider mb-1">
+    <div className="flex-1 flex flex-col h-[calc(100vh-3.5rem)] lg:h-screen bg-[#07090e] overflow-hidden">
+      {/* Toast Alert Banner */}
+      {toast && (
+        <div
+          className={`fixed top-4 right-4 z-50 flex items-center space-x-2 px-4 py-3 rounded-xl shadow-2xl backdrop-blur-md border animate-in slide-in-from-top duration-200 ${
+            toast.type === "error"
+              ? "bg-rose-950/90 text-rose-200 border-rose-500/30 shadow-rose-950/50"
+              : toast.type === "info"
+              ? "bg-indigo-950/90 text-indigo-200 border-indigo-500/30 shadow-indigo-950/50"
+              : "bg-emerald-950/90 text-emerald-200 border-emerald-500/30 shadow-emerald-950/50"
+          }`}
+        >
+          {toast.type === "error" ? (
+            <AlertCircle className="w-4 h-4 text-rose-400 flex-shrink-0" />
+          ) : (
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0" />
+          )}
+          <span className="text-xs font-medium">{toast.message}</span>
+          <button onClick={() => setToast(null)} className="p-1 hover:opacity-70">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Top IDE Toolbar */}
+      <div className="h-12 px-4 flex items-center justify-between border-b border-white/[0.08] bg-[#090d18] flex-shrink-0">
+        <div className="flex items-center space-x-3 text-xs">
+          <div className="flex items-center space-x-1.5 text-rose-400 font-bold uppercase tracking-wider">
             <ShieldAlert className="w-4 h-4" />
-            <span>Administrative Control Center</span>
+            <span>Admin Studio</span>
           </div>
-          <h1 className="text-3xl font-extrabold text-white tracking-tight">
-            แผงควบคุมระบบ (Admin Panel)
-          </h1>
-          <p className="text-sm text-slate-400 mt-1">
-            จัดการคอร์ส, สร้างโจทย์, กำหนด Test Cases (Hidden/Sample) และตรวจสอบ Submissions
-          </p>
+          <span className="text-slate-600">/</span>
+          <span className="text-slate-400">
+            {activeView === "problem" && selectedProblem
+              ? `${selectedCourse?.title || "Course"} > ${selectedProblem.title}`
+              : activeView === "course" && selectedCourse
+              ? selectedCourse.title
+              : activeView === "submissions"
+              ? "Live Submissions Log"
+              : "Overview"}
+          </span>
         </div>
 
-        {/* Tab Switcher */}
-        <div className="flex items-center space-x-1 p-1 rounded-xl bg-slate-900 border border-slate-800">
+        <div className="flex items-center space-x-2">
           <button
-            onClick={() => setActiveTab("courses")}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-              activeTab === "courses"
-                ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                : "text-slate-400 hover:text-white"
-            }`}
+            onClick={() => handleOpenCourseModal()}
+            className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white shadow-sm transition-all"
           >
-            คอร์ส (Courses)
+            <Plus className="w-3.5 h-3.5" />
+            <span>+ คอร์ส</span>
           </button>
+
           <button
-            onClick={() => setActiveTab("problems")}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-              activeTab === "problems"
-                ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                : "text-slate-400 hover:text-white"
-            }`}
+            onClick={() => handleOpenProblemModal(undefined, selectedCourseId || undefined)}
+            className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-all"
           >
-            โจทย์ (Problems)
+            <Plus className="w-3.5 h-3.5" />
+            <span>+ โจทย์</span>
           </button>
-          {selectedProblemId && (
-            <button
-              onClick={() => setActiveTab("testcases")}
-              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-                activeTab === "testcases"
-                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                  : "text-slate-400 hover:text-white"
-              }`}
-            >
-              Test Cases (#{selectedProblemId})
-            </button>
-          )}
+
           <button
-            onClick={() => setActiveTab("submissions")}
-            className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
-              activeTab === "submissions"
-                ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
-                : "text-slate-400 hover:text-white"
-            }`}
+            onClick={loadAllData}
+            title="รีเฟรชข้อมูล"
+            className="p-1.5 text-slate-400 hover:text-white hover:bg-white/5 rounded-lg transition-colors"
           >
-            Submissions
+            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
           </button>
         </div>
       </div>
 
-      {/* TAB 1: COURSES MANAGEMENT */}
-      {activeTab === "courses" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <BookOpen className="w-5 h-5 text-indigo-400" />
-              <span>จัดการคอร์สทั้งหมด ({courses.length})</span>
-            </h2>
-            <button
-              onClick={() => handleOpenCourseModal()}
-              className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30 transition-all"
-            >
-              <Plus className="w-4 h-4" />
-              <span>เพิ่มคอร์สใหม่</span>
-            </button>
-          </div>
+      {/* Main 2-Column Split: File Explorer (Left) & Inspector/Editor (Right) */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* ========================================================= */}
+        {/* LEFT COLUMN: FILE EXPLORER TREE VIEW */}
+        {/* ========================================================= */}
+        <div className="w-72 lg:w-80 flex-shrink-0 flex flex-col border-r border-white/[0.08] bg-[#080c16] overflow-hidden">
+          {/* Explorer Title & Search */}
+          <div className="p-3 border-b border-white/[0.06] space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] font-bold text-slate-400 tracking-wider uppercase flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-indigo-400" />
+                <span>EXPLORER</span>
+              </span>
 
-          <div className="rounded-2xl glass-panel border border-white/5 overflow-hidden">
-            <div className="divide-y divide-white/5">
-              {courses.map((c) => (
-                <div
-                  key={c.id}
-                  className="p-4 flex items-center justify-between hover:bg-slate-800/30 transition-colors"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-base font-bold text-white">
-                        {c.title}
-                      </span>
-                      <span className="text-xs px-2 py-0.5 rounded font-mono bg-slate-800 text-slate-400">
-                        /{c.slug}
-                      </span>
-                      <span className="text-xs px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300">
-                        {c.difficulty}
-                      </span>
-                      {c.isPublished ? (
-                        <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                          เผยแพร่แล้ว
-                        </span>
-                      ) : (
-                        <span className="text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-400">
-                          ฉบับร่าง (Draft)
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-xs text-slate-400 line-clamp-1 max-w-2xl">
-                      {c.description}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => handleOpenCourseModal(c)}
-                      className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
-                      title="แก้ไขคอร์ส"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteCourse(c.id)}
-                      className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
-                      title="ลบคอร์ส"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 2: PROBLEMS MANAGEMENT */}
-      {activeTab === "problems" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-white flex items-center gap-2">
-              <Code2 className="w-5 h-5 text-indigo-400" />
-              <span>จัดการโจทย์ทั้งหมด ({problems.length})</span>
-            </h2>
-            <button
-              onClick={() => handleOpenProblemModal()}
-              className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30 transition-all"
-            >
-              <Plus className="w-4 h-4" />
-              <span>เพิ่มโจทย์ใหม่</span>
-            </button>
-          </div>
-
-          <div className="rounded-2xl glass-panel border border-white/5 overflow-hidden">
-            <div className="divide-y divide-white/5">
-              {problems.map((p) => (
-                <div
-                  key={p.id}
-                  className="p-4 flex items-center justify-between hover:bg-slate-800/30 transition-colors"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center space-x-2">
-                      <span className="text-base font-bold text-white">
-                        {p.title}
-                      </span>
-                      <span className="text-xs px-2 py-0.5 rounded font-mono bg-slate-800 text-slate-400">
-                        /{p.slug}
-                      </span>
-                      <span className="text-xs px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-300">
-                        {p.difficulty}
-                      </span>
-                      <span className="text-xs font-semibold text-amber-400">
-                        +{p.points} pts
-                      </span>
-                      {p.isPublished ? (
-                        <span className="text-[11px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400">
-                          Published
-                        </span>
-                      ) : (
-                        <span className="text-[11px] px-2 py-0.5 rounded bg-slate-800 text-slate-400">
-                          Draft
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-3 text-xs text-slate-400">
-                      <span>⏱️ {p.timeLimitMs}ms</span>
-                      <span>💾 {p.memoryLimitMb}MB</span>
-                      <span className="text-indigo-400 font-semibold">
-                        🧪 {p.testCasesCount} Test Cases
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => handleSelectProblemForTestCases(p.id)}
-                      className="px-3 py-1.5 rounded-lg bg-indigo-600/20 hover:bg-indigo-600/40 text-indigo-300 text-xs font-semibold transition-colors border border-indigo-500/30"
-                    >
-                      จัดการ Test Cases ({p.testCasesCount})
-                    </button>
-                    <button
-                      onClick={() => handleOpenProblemModal(p)}
-                      className="p-2 text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-colors"
-                    >
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDeleteProblem(p.id)}
-                      className="p-2 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 3: TEST CASES MANAGEMENT */}
-      {activeTab === "testcases" && (
-        <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
               <button
-                onClick={() => setActiveTab("problems")}
-                className="text-xs font-semibold text-indigo-400 hover:underline mb-1"
+                onClick={() => setActiveView("overview")}
+                className={`text-[11px] px-2 py-0.5 rounded transition-colors ${
+                  activeView === "overview"
+                    ? "bg-indigo-500/20 text-indigo-300 font-semibold"
+                    : "text-slate-400 hover:text-white"
+                }`}
               >
-                ← กลับหน้ารายการโจทย์
+                Overview
               </button>
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <ListOrdered className="w-5 h-5 text-indigo-400" />
-                <span>Test Cases สำหรับโจทย์ #{selectedProblemId}</span>
-              </h2>
             </div>
 
-            <button
-              onClick={handleOpenAddTcModal}
-              className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30 transition-all"
-            >
-              <Plus className="w-4 h-4" />
-              <span>เพิ่ม Test Case</span>
-            </button>
+            {/* Quick Search */}
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-slate-500" />
+              <input
+                type="text"
+                placeholder="ค้นหาคอร์สหรือโจทย์..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full pl-8 pr-3 py-1.5 rounded-lg bg-black/40 border border-white/5 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/40"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-2 top-2 text-slate-500 hover:text-white"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
           </div>
 
-          <div className="rounded-2xl glass-panel border border-white/5 overflow-hidden">
-            {testCases.length === 0 ? (
-              <div className="p-8 text-center text-sm text-slate-400">
-                ยังไม่มี Test Case สำหรับโจทย์นี้
+          {/* Tree View Content */}
+          <div className="flex-1 overflow-y-auto p-2 space-y-1 select-none">
+            {/* Tree Section 1: Courses & Problems */}
+            <div className="px-2 py-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+              <span>COURSES & PROBLEMS</span>
+              <span>{courses.length}</span>
+            </div>
+
+            {filteredCourses.length === 0 ? (
+              <div className="p-4 text-center text-xs text-slate-500 font-mono">
+                {searchQuery ? "ไม่พบข้อมูลที่ค้นหา" : "ยังไม่มีคอร์สในระบบ"}
               </div>
             ) : (
-              <div className="divide-y divide-white/5">
-                {testCases.map((tc, idx) => (
-                  <div key={tc.id} className="p-4 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-xs font-bold text-white">
-                          Test Case #{idx + 1}
-                        </span>
-                        <button
-                          type="button"
-                          onClick={() => handleToggleTcVisibility(tc)}
-                          className={`flex items-center gap-1.5 text-[11px] px-2.5 py-0.5 rounded-md border font-medium transition-all ${
-                            tc.isHidden
-                              ? "bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20"
-                              : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20"
-                          }`}
-                          title="คลิกเพื่อสลับระหว่าง Sample (แสดงในโจทย์) กับ Hidden (ซ่อน)"
-                        >
-                          {tc.isHidden ? (
-                            <>
-                              <EyeOff className="w-3 h-3" />
-                              <span>Hidden (ซ่อน) ⇄ คลิกเพื่อเปลี่ยนเป็น Sample</span>
-                            </>
-                          ) : (
-                            <>
-                              <Eye className="w-3 h-3" />
-                              <span>Sample (ตัวอย่างในโจทย์) ⇄ คลิกเพื่อซ่อน</span>
-                            </>
-                          )}
-                        </button>
-                        <span className="text-xs text-slate-400">
-                          ({tc.points} pts)
-                        </span>
-                      </div>
+              filteredCourses.map((course) => {
+                const isExpanded = expandedCourses[course.id] ?? true;
+                const isCourseSelected = activeView === "course" && selectedCourseId === course.id;
+                const courseProblems = problems.filter((p) => p.courseId === course.id);
 
-                      <div className="flex items-center space-x-1">
-                        <button
-                          onClick={() => handleOpenEditTcModal(tc)}
-                          className="text-slate-400 hover:text-white hover:bg-slate-800 p-1.5 rounded-lg transition-colors"
-                          title="แก้ไข Test Case"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteTestCase(tc.id)}
-                          className="text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 p-1.5 rounded-lg transition-colors"
-                          title="ลบ Test Case"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-3 text-xs font-mono">
-                      <div>
-                        <span className="text-slate-500 text-[10px] block font-sans">
-                          Input:
-                        </span>
-                        <pre className="p-2 rounded bg-black/40 text-emerald-300 overflow-x-auto">
-                          {tc.inputData || "(ไม่มี input)"}
-                        </pre>
-                      </div>
-                      <div>
-                        <span className="text-slate-500 text-[10px] block font-sans">
-                          Expected Output:
-                        </span>
-                        <pre className="p-2 rounded bg-black/40 text-indigo-300 overflow-x-auto">
-                          {tc.expectedOutput}
-                        </pre>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* TAB 4: SUBMISSIONS AUDIT */}
-      {activeTab === "submissions" && (
-        <div className="space-y-4">
-          <h2 className="text-lg font-bold text-white flex items-center gap-2">
-            <Clock className="w-5 h-5 text-indigo-400" />
-            <span>ประวัติการส่งคำตอบทั้งหมดในระบบ (Submissions Audit)</span>
-          </h2>
-
-          <div className="rounded-2xl glass-panel border border-white/5 overflow-hidden">
-            <div className="divide-y divide-white/5">
-              {submissions.map((sub) => (
-                <div
-                  key={sub.id}
-                  className="p-4 flex items-center justify-between hover:bg-slate-800/30 transition-colors"
-                >
-                  <div className="flex items-center space-x-3">
-                    <span
-                      className={`text-xs font-bold px-2 py-0.5 rounded ${
-                        sub.status === "ACCEPTED"
-                          ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                          : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                return (
+                  <div key={course.id} className="space-y-0.5">
+                    {/* Course Folder Row */}
+                    <div
+                      onClick={() => selectCourse(course)}
+                      className={`group flex items-center justify-between px-2 py-1.5 rounded-lg cursor-pointer text-xs font-medium transition-all ${
+                        isCourseSelected
+                          ? "bg-indigo-600/20 text-white font-semibold border border-indigo-500/30"
+                          : "text-slate-300 hover:bg-white/[0.04]"
                       }`}
                     >
-                      {sub.status}
-                    </span>
-                    <div>
-                      <span className="text-sm font-semibold text-white block">
-                        {sub.problemTitle || `โจทย์ #${sub.problemId}`} (User #{sub.userId})
-                      </span>
-                      <span className="text-xs text-slate-500">
-                        {new Date(sub.createdAt).toLocaleString()} • {sub.executionTimeMs ?? 0} ms
-                      </span>
-                    </div>
-                  </div>
+                      <div className="flex items-center space-x-1.5 min-w-0">
+                        {/* Expand / Collapse Chevron */}
+                        <button
+                          type="button"
+                          onClick={(e) => toggleCourseExpand(course.id, e)}
+                          className="p-0.5 text-slate-500 hover:text-slate-300"
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="w-3.5 h-3.5" />
+                          ) : (
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          )}
+                        </button>
 
-                  <div className="flex items-center space-x-3">
-                    <span className="text-xs font-bold text-slate-300">
-                      {sub.score} pts
-                    </span>
-                    <button
-                      onClick={() => setCodeViewerModal(sub)}
-                      className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-slate-300 hover:text-white transition-colors"
-                    >
-                      ดูโค้ด Python
-                    </button>
+                        {/* Folder Icon */}
+                        {isExpanded ? (
+                          <FolderOpen className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                        ) : (
+                          <Folder className="w-4 h-4 text-amber-400 flex-shrink-0" />
+                        )}
+
+                        <span className="truncate">{course.title}</span>
+                      </div>
+
+                      {/* Right metadata & Hover action icons */}
+                      <div className="flex items-center space-x-1">
+                        <span className="text-[10px] text-slate-500 group-hover:hidden">
+                          ({courseProblems.length})
+                        </span>
+
+                        <div className="hidden group-hover:flex items-center space-x-1">
+                          <button
+                            type="button"
+                            title="สร้างโจทย์ในคอร์สนี้"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenProblemModal(undefined, course.id);
+                            }}
+                            className="p-1 hover:text-emerald-400 rounded"
+                          >
+                            <Plus className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            title="แก้ไขคอร์ส"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenCourseModal(course);
+                            }}
+                            className="p-1 hover:text-indigo-400 rounded"
+                          >
+                            <Edit2 className="w-3 h-3" />
+                          </button>
+                          <button
+                            type="button"
+                            title="ลบคอร์ส"
+                            onClick={(e) => triggerDeleteCourse(course, e)}
+                            className="p-1 hover:text-rose-400 rounded"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Problem Files (Nested under Course) */}
+                    {isExpanded && (
+                      <div className="pl-6 space-y-0.5 border-l border-white/5 ml-3">
+                        {courseProblems.length === 0 ? (
+                          <div className="px-3 py-1 text-[11px] text-slate-500 italic">
+                            (ยังไม่มีโจทย์ในคอร์สนี้)
+                          </div>
+                        ) : (
+                          courseProblems.map((prob) => {
+                            const isProblemSelected =
+                              activeView === "problem" && selectedProblemId === prob.id;
+
+                            return (
+                              <div
+                                key={prob.id}
+                                onClick={() => selectProblem(prob)}
+                                className={`group flex items-center justify-between px-2.5 py-1.5 rounded-lg cursor-pointer text-xs transition-all ${
+                                  isProblemSelected
+                                    ? "bg-emerald-500/15 text-emerald-300 font-semibold border border-emerald-500/30"
+                                    : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.03]"
+                                }`}
+                              >
+                                <div className="flex items-center space-x-2 min-w-0">
+                                  <FileCode className={`w-3.5 h-3.5 flex-shrink-0 ${
+                                    isProblemSelected ? "text-emerald-400" : "text-slate-500"
+                                  }`} />
+                                  <span className="truncate">{prob.title}.py</span>
+                                </div>
+
+                                <div className="flex items-center space-x-1.5 flex-shrink-0">
+                                  {getDifficultyBadge(prob.difficulty)}
+
+                                  <div className="hidden group-hover:flex items-center space-x-1">
+                                    <button
+                                      type="button"
+                                      title={prob.isPublished ? "ซ่อนเป็นดราฟต์" : "เผยแพร่โจทย์"}
+                                      onClick={(e) => handleTogglePublishProblem(prob, e)}
+                                      className="p-1 hover:text-indigo-400 rounded"
+                                    >
+                                      {prob.isPublished ? (
+                                        <Eye className="w-3 h-3 text-emerald-400" />
+                                      ) : (
+                                        <EyeOff className="w-3 h-3 text-slate-500" />
+                                      )}
+                                    </button>
+                                    <button
+                                      type="button"
+                                      title="ลบโจทย์"
+                                      onClick={(e) => triggerDeleteProblem(prob, e)}
+                                      className="p-1 hover:text-rose-400 rounded"
+                                    >
+                                      <Trash2 className="w-3 h-3" />
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                );
+              })
+            )}
+
+            {/* Tree Section 2: Submissions & Logs */}
+            <div className="pt-4 px-2 py-1 text-[10px] font-bold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+              <span>MONITORING</span>
+            </div>
+
+            <div
+              onClick={() => setActiveView("submissions")}
+              className={`flex items-center justify-between px-2.5 py-2 rounded-lg cursor-pointer text-xs font-medium transition-all ${
+                activeView === "submissions"
+                  ? "bg-indigo-600/20 text-indigo-300 font-semibold border border-indigo-500/30"
+                  : "text-slate-400 hover:text-slate-200 hover:bg-white/[0.04]"
+              }`}
+            >
+              <div className="flex items-center space-x-2">
+                <ListOrdered className="w-4 h-4 text-sky-400" />
+                <span>ประวัติการส่ง (Submissions)</span>
+              </div>
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-slate-800 text-slate-400">
+                {submissions.length}
+              </span>
             </div>
           </div>
         </div>
-      )}
 
-      {/* Course Edit/Create Modal */}
-      {courseModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-lg p-6 rounded-2xl glass-panel bg-[#0d121f] border border-white/10 space-y-4">
-            <h3 className="text-lg font-bold text-white">
-              {editingCourse ? "แก้ไขคอร์ส" : "เพิ่มคอร์สใหม่"}
-            </h3>
+        {/* ========================================================= */}
+        {/* RIGHT COLUMN: INSPECTOR & DETAIL WORKSPACE */}
+        {/* ========================================================= */}
+        <div className="flex-1 flex flex-col bg-[#07090e] overflow-y-auto">
+          {/* VIEW A: PROBLEM INSPECTOR */}
+          {activeView === "problem" && selectedProblem ? (
+            <div className="p-6 space-y-6 max-w-5xl mx-auto w-full">
+              {/* Problem Inspector Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/[0.08]">
+                <div className="space-y-1">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs text-slate-500 font-mono">#{selectedProblem.id}</span>
+                    <h2 className="text-2xl font-bold text-white tracking-tight">
+                      {selectedProblem.title}
+                    </h2>
+                    {getDifficultyBadge(selectedProblem.difficulty)}
+                    <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                      +{selectedProblem.points} คะแนน
+                    </span>
+                  </div>
+                  <div className="text-xs text-slate-400 flex items-center space-x-2">
+                    <span>คอร์ส: <span className="text-indigo-300 font-medium">{selectedCourse?.title}</span></span>
+                    <span>•</span>
+                    <span className="font-mono text-slate-500">slug: {selectedProblem.slug}</span>
+                  </div>
+                </div>
 
-            <form onSubmit={handleSaveCourse} className="space-y-3 text-xs">
+                <div className="flex items-center space-x-2">
+                  <Link
+                    to={`/problems/${selectedProblem.id}`}
+                    target="_blank"
+                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 transition-colors"
+                  >
+                    <span>ลองทำโจทย์</span>
+                    <ExternalLink className="w-3.5 h-3.5" />
+                  </Link>
+
+                  <button
+                    onClick={() => handleOpenProblemModal(selectedProblem)}
+                    className="flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>แก้ไข</span>
+                  </button>
+
+                  <button
+                    onClick={() => triggerDeleteProblem(selectedProblem)}
+                    className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                    title="ลบโจทย์"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Problem Tabs */}
+              <div className="flex items-center space-x-1 border-b border-white/[0.08]">
+                <button
+                  onClick={() => setProblemTab("specs")}
+                  className={`flex items-center space-x-2 px-4 py-2 text-xs font-semibold border-b-2 transition-colors ${
+                    problemTab === "specs"
+                      ? "border-indigo-500 text-white bg-slate-900/60"
+                      : "border-transparent text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <FileText className="w-4 h-4 text-indigo-400" />
+                  <span>รายละเอียดโจทย์ (Specs)</span>
+                </button>
+
+                <button
+                  onClick={() => setProblemTab("testcases")}
+                  className={`flex items-center space-x-2 px-4 py-2 text-xs font-semibold border-b-2 transition-colors ${
+                    problemTab === "testcases"
+                      ? "border-emerald-500 text-white bg-slate-900/60"
+                      : "border-transparent text-slate-400 hover:text-white"
+                  }`}
+                >
+                  <Code2 className="w-4 h-4 text-emerald-400" />
+                  <span>Test Cases ({testCases.length})</span>
+                </button>
+              </div>
+
+              {/* Tab 1: Specs */}
+              {problemTab === "specs" && (
+                <div className="space-y-6">
+                  {/* Meta Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="p-3 rounded-xl bg-slate-900/60 border border-white/5">
+                      <div className="text-[11px] text-slate-500">คะแนน (Points)</div>
+                      <div className="text-base font-bold text-amber-300">{selectedProblem.points} pts</div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-900/60 border border-white/5">
+                      <div className="text-[11px] text-slate-500">เวลาจำกัด (Time Limit)</div>
+                      <div className="text-base font-bold text-slate-200">{selectedProblem.timeLimitMs} ms</div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-900/60 border border-white/5">
+                      <div className="text-[11px] text-slate-500">หน่วยความจำ (Memory)</div>
+                      <div className="text-base font-bold text-slate-200">{selectedProblem.memoryLimitMb} MB</div>
+                    </div>
+                    <div className="p-3 rounded-xl bg-slate-900/60 border border-white/5">
+                      <div className="text-[11px] text-slate-500">สถานะ (Status)</div>
+                      <div className="text-base font-bold text-slate-200 flex items-center gap-1.5 mt-0.5">
+                        {selectedProblem.isPublished ? (
+                          <span className="text-emerald-400 text-xs flex items-center gap-1">
+                            <Eye className="w-3.5 h-3.5" /> Published
+                          </span>
+                        ) : (
+                          <span className="text-slate-500 text-xs flex items-center gap-1">
+                            <EyeOff className="w-3.5 h-3.5" /> Draft
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Problem Description */}
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wider">คำอธิบายโจทย์ (Description)</h4>
+                    <div className="p-4 rounded-xl bg-[#090d18] border border-white/5 text-slate-200 text-sm whitespace-pre-wrap leading-relaxed">
+                      {selectedProblem.description}
+                    </div>
+                  </div>
+
+                  {/* Input / Output Specs */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wider">ข้อมูลนำเข้า (Input Description)</h4>
+                      <div className="p-3.5 rounded-xl bg-[#090d18] border border-white/5 text-slate-300 text-xs whitespace-pre-wrap leading-relaxed">
+                        {selectedProblem.inputDescription || "(ไม่มีระบุ)"}
+                      </div>
+                    </div>
+
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wider">ข้อมูลส่งออก (Output Description)</h4>
+                      <div className="p-3.5 rounded-xl bg-[#090d18] border border-white/5 text-slate-300 text-xs whitespace-pre-wrap leading-relaxed">
+                        {selectedProblem.outputDescription || "(ไม่มีระบุ)"}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Constraints */}
+                  {selectedProblem.constraintsText && (
+                    <div className="space-y-2">
+                      <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wider">เงื่อนไขและข้อจำกัด (Constraints)</h4>
+                      <div className="p-3 rounded-xl bg-[#090d18] border border-white/5 font-mono text-xs text-amber-300">
+                        {selectedProblem.constraintsText}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Tab 2: Test Cases Manager */}
+              {problemTab === "testcases" && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-sm font-bold text-white">ชุดทดสอบของโจทย์ (Test Cases)</h3>
+                      <p className="text-xs text-slate-400">
+                        ชุดทดสอบตัวอย่าง (Sample) จะแสดงให้ผู้เรียนเห็นในหน้าโจทย์ ส่วนชุดทดสอบลับ (Hidden) จะใช้ตรวจจริง
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={handleOpenAddTcModal}
+                      className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm transition-all"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>+ เพิ่ม Test Case</span>
+                    </button>
+                  </div>
+
+                  {testCases.length === 0 ? (
+                    <div className="p-8 text-center rounded-2xl border border-dashed border-white/10 space-y-3">
+                      <div className="p-3 rounded-xl bg-slate-900 w-fit mx-auto text-slate-500">
+                        <Code2 className="w-6 h-6" />
+                      </div>
+                      <div className="text-sm text-slate-400 font-medium">ยังไม่มี Test Case สำหรับโจทย์นี้</div>
+                      <button
+                        onClick={handleOpenAddTcModal}
+                        className="px-4 py-2 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white transition-all"
+                      >
+                        เพิ่ม Test Case แรก
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-white/5 overflow-hidden bg-[#090d18]">
+                      <table className="w-full text-left text-xs">
+                        <thead className="bg-slate-900/80 border-b border-white/5 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                          <tr>
+                            <th className="py-3 px-4">#</th>
+                            <th className="py-3 px-4">ประเภท (Visibility)</th>
+                            <th className="py-3 px-4">Input (stdin)</th>
+                            <th className="py-3 px-4">Expected Output</th>
+                            <th className="py-3 px-4">คะแนน</th>
+                            <th className="py-3 px-4 text-right">จัดการ</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5 text-slate-300 font-mono">
+                          {testCases.map((tc, index) => (
+                            <tr key={tc.id} className="hover:bg-white/[0.02]">
+                              <td className="py-3 px-4 text-slate-500 font-bold">{index + 1}</td>
+                              <td className="py-3 px-4">
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleTcVisibility(tc)}
+                                  className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-full text-[11px] font-sans font-bold transition-all cursor-pointer ${
+                                    tc.isHidden
+                                      ? "bg-slate-800 text-slate-400 hover:bg-slate-700 border border-slate-700"
+                                      : "bg-emerald-500/15 text-emerald-300 hover:bg-emerald-500/25 border border-emerald-500/30"
+                                  }`}
+                                  title="คลิกเพื่อสลับระหว่างตัวอย่าง (Sample) และลับ (Hidden)"
+                                >
+                                  {tc.isHidden ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
+                                  <span>{tc.isHidden ? "ลับ (Hidden)" : "ตัวอย่าง (Sample)"}</span>
+                                </button>
+                              </td>
+                              <td className="py-3 px-4 max-w-xs truncate text-slate-300">
+                                {tc.inputData || (tc as any).input_data || <span className="text-slate-600">(empty)</span>}
+                              </td>
+                              <td className="py-3 px-4 max-w-xs truncate text-emerald-300">
+                                {tc.expectedOutput || (tc as any).expected_output}
+                              </td>
+                              <td className="py-3 px-4 text-amber-300 font-bold">{tc.points} pts</td>
+                              <td className="py-3 px-4 text-right space-x-1 font-sans">
+                                <button
+                                  onClick={() => handleOpenEditTcModal(tc)}
+                                  className="p-1.5 text-slate-400 hover:text-indigo-300 hover:bg-white/5 rounded-lg transition-colors"
+                                  title="แก้ไข Test Case"
+                                >
+                                  <Edit2 className="w-3.5 h-3.5" />
+                                </button>
+                                <button
+                                  onClick={() => triggerDeleteTestCase(tc.id)}
+                                  className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                                  title="ลบ Test Case"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : activeView === "course" && selectedCourse ? (
+            /* VIEW B: COURSE INSPECTOR */
+            <div className="p-6 space-y-6 max-w-4xl mx-auto w-full">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-white/[0.08]">
+                <div className="space-y-1">
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs text-slate-500 font-mono">#{selectedCourse.id}</span>
+                    <h2 className="text-2xl font-bold text-white tracking-tight">{selectedCourse.title}</h2>
+                    {getDifficultyBadge(selectedCourse.difficulty)}
+                  </div>
+                  <div className="text-xs text-slate-400 font-mono">slug: {selectedCourse.slug}</div>
+                </div>
+
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => handleTogglePublishCourse(selectedCourse)}
+                    className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-white/5 hover:bg-white/10 text-slate-300 border border-white/10 transition-colors"
+                  >
+                    {selectedCourse.isPublished ? (
+                      <>
+                        <Eye className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>เผยแพร่อยู่</span>
+                      </>
+                    ) : (
+                      <>
+                        <EyeOff className="w-3.5 h-3.5 text-slate-500" />
+                        <span>ฉบับร่าง (Draft)</span>
+                      </>
+                    )}
+                  </button>
+
+                  <button
+                    onClick={() => handleOpenCourseModal(selectedCourse)}
+                    className="flex items-center space-x-1 px-3 py-1.5 rounded-lg text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 text-white transition-colors"
+                  >
+                    <Edit2 className="w-3.5 h-3.5" />
+                    <span>แก้ไขคอร์ส</span>
+                  </button>
+
+                  <button
+                    onClick={() => triggerDeleteCourse(selectedCourse)}
+                    className="p-1.5 text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors"
+                    title="ลบคอร์ส"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Course Description */}
+              <div className="space-y-2">
+                <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wider">คำอธิบายคอร์ส (Description)</h4>
+                <div className="p-4 rounded-xl bg-[#090d18] border border-white/5 text-slate-200 text-sm whitespace-pre-wrap leading-relaxed">
+                  {selectedCourse.description}
+                </div>
+              </div>
+
+              {/* Problems in this course */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-indigo-400 uppercase tracking-wider">
+                    โจทย์ในคอร์สนี้ ({problems.filter((p) => p.courseId === selectedCourse.id).length})
+                  </h4>
+
+                  <button
+                    onClick={() => handleOpenProblemModal(undefined, selectedCourse.id)}
+                    className="flex items-center space-x-1 text-xs font-semibold text-emerald-400 hover:text-emerald-300"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>เพิ่มโจทย์ในคอร์สนี้</span>
+                  </button>
+                </div>
+
+                <div className="space-y-1.5">
+                  {problems.filter((p) => p.courseId === selectedCourse.id).map((prob) => (
+                    <div
+                      key={prob.id}
+                      onClick={() => selectProblem(prob)}
+                      className="flex items-center justify-between p-3 rounded-xl bg-[#090d18] hover:bg-white/[0.04] border border-white/5 cursor-pointer transition-all"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <FileCode className="w-4 h-4 text-emerald-400" />
+                        <div>
+                          <div className="text-xs font-bold text-white">{prob.title}</div>
+                          <div className="text-[10px] text-slate-500 font-mono">{prob.slug}</div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-2">
+                        {getDifficultyBadge(prob.difficulty)}
+                        <span className="text-xs font-bold text-amber-300">+{prob.points} pts</span>
+                        <ChevronRight className="w-4 h-4 text-slate-500" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          ) : activeView === "submissions" ? (
+            /* VIEW C: LIVE SUBMISSIONS AUDIT */
+            <div className="p-6 space-y-4 max-w-5xl mx-auto w-full">
               <div>
-                <label className="block text-slate-300 mb-1 font-semibold">ชื่อคอร์ส (Title)</label>
+                <h2 className="text-xl font-bold text-white tracking-tight">ประวัติการส่งโค้ดทั้งหมด (Submissions)</h2>
+                <p className="text-xs text-slate-400">ตรวจสอบสถานะการส่งโค้ด ผลการตรวจ และเปิดดูซอร์สโค้ดของผู้เรียน</p>
+              </div>
+
+              <div className="rounded-2xl border border-white/5 overflow-hidden bg-[#090d18]">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-900/80 border-b border-white/5 text-slate-400 font-bold uppercase tracking-wider text-[10px]">
+                    <tr>
+                      <th className="py-3 px-4"># ID</th>
+                      <th className="py-3 px-4">ผู้ส่ง (User)</th>
+                      <th className="py-3 px-4">โจทย์ (Problem)</th>
+                      <th className="py-3 px-4">สถานะ (Verdict)</th>
+                      <th className="py-3 px-4">เวลาตรวจ</th>
+                      <th className="py-3 px-4">ส่งเมื่อ</th>
+                      <th className="py-3 px-4 text-right">โค้ด</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 text-slate-300 font-mono">
+                    {submissions.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-8 text-center text-slate-500 font-sans">
+                          ยังไม่มีประวัติการส่งโค้ด
+                        </td>
+                      </tr>
+                    ) : (
+                      submissions.map((sub) => (
+                        <tr key={sub.id} className="hover:bg-white/[0.02]">
+                          <td className="py-3 px-4 text-slate-500">{sub.id}</td>
+                          <td className="py-3 px-4 font-sans font-medium text-white">{sub.userId}</td>
+                          <td className="py-3 px-4 font-sans text-indigo-300">Problem #{sub.problemId}</td>
+                          <td className="py-3 px-4 font-sans">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                sub.status === "ACCEPTED"
+                                  ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+                                  : "bg-rose-500/10 text-rose-400 border border-rose-500/20"
+                              }`}
+                            >
+                              {sub.status}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-slate-400">{sub.executionTimeMs ?? 0} ms</td>
+                          <td className="py-3 px-4 font-sans text-[11px] text-slate-500">
+                            {new Date(sub.createdAt).toLocaleDateString("th-TH")}
+                          </td>
+                          <td className="py-3 px-4 text-right font-sans">
+                            <button
+                              onClick={() => setCodeViewerModal(sub)}
+                              className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs transition-colors"
+                            >
+                              ดูโค้ด
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ) : (
+            /* VIEW D: OVERVIEW DASHBOARD */
+            <div className="p-8 space-y-8 max-w-4xl mx-auto w-full my-auto">
+              <div className="text-center space-y-2">
+                <div className="inline-flex p-3 rounded-2xl bg-indigo-600/10 border border-indigo-500/20 text-indigo-400 mb-2">
+                  <ShieldAlert className="w-8 h-8" />
+                </div>
+                <h2 className="text-2xl font-extrabold text-white tracking-tight">PyQuest Admin Studio</h2>
+                <p className="text-sm text-slate-400 max-w-md mx-auto">
+                  เลือกคอร์สหรือไฟล์โจทย์จากแถบ File Explorer ทางซ้ายมือ เพื่อจัดการเนื้อหา ข้อมูลทดสอบ และตรวจสอบผล
+                </p>
+              </div>
+
+              {/* Stats Grid */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="p-5 rounded-2xl glass-card border border-white/5 space-y-1">
+                  <div className="flex items-center justify-between text-slate-400 text-xs">
+                    <span>คอร์สทั้งหมด</span>
+                    <Folder className="w-4 h-4 text-indigo-400" />
+                  </div>
+                  <div className="text-2xl font-bold text-white">{courses.length}</div>
+                </div>
+
+                <div className="p-5 rounded-2xl glass-card border border-white/5 space-y-1">
+                  <div className="flex items-center justify-between text-slate-400 text-xs">
+                    <span>โจทย์ทั้งหมด</span>
+                    <FileCode className="w-4 h-4 text-emerald-400" />
+                  </div>
+                  <div className="text-2xl font-bold text-white">{problems.length}</div>
+                </div>
+
+                <div className="p-5 rounded-2xl glass-card border border-white/5 space-y-1">
+                  <div className="flex items-center justify-between text-slate-400 text-xs">
+                    <span>การส่งคำตอบทั้งหมด</span>
+                    <ListOrdered className="w-4 h-4 text-sky-400" />
+                  </div>
+                  <div className="text-2xl font-bold text-white">{submissions.length}</div>
+                </div>
+              </div>
+
+              {/* Quick Actions */}
+              <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+                <button
+                  onClick={() => handleOpenCourseModal()}
+                  className="flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white shadow-lg shadow-indigo-600/20 transition-all active:scale-95"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>สร้างคอร์สใหม่</span>
+                </button>
+
+                <button
+                  onClick={() => handleOpenProblemModal()}
+                  className="flex items-center space-x-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>สร้างโจทย์ใหม่</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ========================================================= */}
+      {/* CUSTOM CONFIRM MODAL */}
+      {/* ========================================================= */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        type={confirmModal.type}
+        loading={confirmModal.loading}
+        onConfirm={confirmModal.onConfirm}
+        onCancel={() => setConfirmModal((prev) => ({ ...prev, isOpen: false }))}
+      />
+
+      {/* ========================================================= */}
+      {/* MODAL 1: COURSE CREATE / EDIT */}
+      {/* ========================================================= */}
+      {courseModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setCourseModalOpen(false)} />
+          <div className="relative w-full max-w-lg rounded-2xl bg-[#0c101c] border border-white/10 p-6 shadow-2xl z-10 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <h3 className="text-base font-bold text-white">
+                {editingCourse ? "แก้ไขคอร์สเรียน" : "สร้างคอร์สเรียนใหม่"}
+              </h3>
+              <button onClick={() => setCourseModalOpen(false)} className="p-1 text-slate-400 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCourse} className="space-y-4 text-xs">
+              <div className="space-y-1">
+                <label className="text-slate-300 font-medium">ชื่อคอร์ส (Title)</label>
                 <input
                   type="text"
                   required
+                  placeholder="เช่น Python Fundamentals"
                   value={courseForm.title}
                   onChange={(e) => setCourseForm({ ...courseForm, title: e.target.value })}
-                  className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white"
+                  className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
-              <div>
-                <label className="block text-slate-300 mb-1 font-semibold">Slug (URL friendly)</label>
+              <div className="space-y-1">
+                <label className="text-slate-300 font-medium">Slug (URL friendly)</label>
                 <input
                   type="text"
                   required
+                  placeholder="เช่น python-fundamentals"
                   value={courseForm.slug}
                   onChange={(e) => setCourseForm({ ...courseForm, slug: e.target.value })}
-                  className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white"
+                  className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white font-mono focus:outline-none focus:border-indigo-500"
                 />
               </div>
 
-              <div>
-                <label className="block text-slate-300 mb-1 font-semibold">ระดับความยาก (Difficulty)</label>
+              <div className="space-y-1">
+                <label className="text-slate-300 font-medium">ระดับความยาก (Difficulty)</label>
                 <select
                   value={courseForm.difficulty}
                   onChange={(e) => setCourseForm({ ...courseForm, difficulty: e.target.value as Difficulty })}
-                  className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white"
+                  className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-indigo-500"
                 >
-                  <option value="EASY">EASY</option>
-                  <option value="MEDIUM">MEDIUM</option>
-                  <option value="HARD">HARD</option>
+                  <option value="EASY">EASY (ง่าย)</option>
+                  <option value="MEDIUM">MEDIUM (ปานกลาง)</option>
+                  <option value="HARD">HARD (ยาก)</option>
                 </select>
               </div>
 
-              <div>
-                <label className="block text-slate-300 mb-1 font-semibold">คำอธิบาย (Description)</label>
+              <div className="space-y-1">
+                <label className="text-slate-300 font-medium">คำอธิบายคอร์ส</label>
                 <textarea
-                  required
                   rows={3}
+                  required
+                  placeholder="รายละเอียดเนื้อหาในคอร์ส..."
                   value={courseForm.description}
                   onChange={(e) => setCourseForm({ ...courseForm, description: e.target.value })}
-                  className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white"
+                  className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-indigo-500 leading-relaxed"
                 />
               </div>
 
-              <div className="flex items-center space-x-2 pt-2">
+              <label className="flex items-center space-x-2 cursor-pointer pt-1">
                 <input
                   type="checkbox"
-                  id="course_pub"
                   checked={courseForm.is_published}
                   onChange={(e) => setCourseForm({ ...courseForm, is_published: e.target.checked })}
-                  className="rounded bg-slate-900 border-slate-800 text-indigo-600 focus:ring-0"
+                  className="w-4 h-4 rounded text-indigo-600 focus:ring-0 bg-slate-900 border-slate-700"
                 />
-                <label htmlFor="course_pub" className="text-slate-300">
-                  เผยแพร่ทันที (Published)
-                </label>
-              </div>
+                <span className="text-slate-300">เผยแพร่คอร์สทันที (Published)</span>
+              </label>
 
-              <div className="flex items-center justify-end space-x-2 pt-4 border-t border-slate-800">
+              <div className="flex items-center justify-end space-x-2 pt-4 border-t border-white/10">
                 <button
                   type="button"
                   onClick={() => setCourseModalOpen(false)}
-                  className="px-4 py-2 text-slate-400 hover:text-white"
+                  className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 transition-colors"
                 >
                   ยกเลิก
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold"
+                  className="px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-semibold shadow-md shadow-indigo-600/20 transition-all"
                 >
-                  บันทึกคอร์ส
+                  {editingCourse ? "บันทึกการแก้ไข" : "สร้างคอร์ส"}
                 </button>
               </div>
             </form>
@@ -791,22 +1372,30 @@ export const AdminDashboardPage: React.FC = () => {
         </div>
       )}
 
-      {/* Problem Edit/Create Modal */}
+      {/* ========================================================= */}
+      {/* MODAL 2: PROBLEM CREATE / EDIT */}
+      {/* ========================================================= */}
       {problemModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm overflow-y-auto">
-          <div className="w-full max-w-2xl p-6 rounded-2xl glass-panel bg-[#0d121f] border border-white/10 space-y-4 my-8">
-            <h3 className="text-lg font-bold text-white">
-              {editingProblem ? "แก้ไขโจทย์" : "เพิ่มโจทย์ใหม่"}
-            </h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setProblemModalOpen(false)} />
+          <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-[#0c101c] border border-white/10 p-6 shadow-2xl z-10 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <h3 className="text-base font-bold text-white">
+                {editingProblem ? "แก้ไขโจทย์เขียนโปรแกรม" : "สร้างโจทย์ใหม่"}
+              </h3>
+              <button onClick={() => setProblemModalOpen(false)} className="p-1 text-slate-400 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
 
-            <form onSubmit={handleSaveProblem} className="space-y-3 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-300 mb-1 font-semibold">คอร์สที่สังกัด</label>
+            <form onSubmit={handleSaveProblem} className="space-y-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-slate-300 font-medium">สังกัดคอร์ส</label>
                   <select
                     value={problemForm.course_id}
                     onChange={(e) => setProblemForm({ ...problemForm, course_id: parseInt(e.target.value) })}
-                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white"
+                    className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-indigo-500"
                   >
                     {courses.map((c) => (
                       <option key={c.id} value={c.id}>
@@ -816,149 +1405,178 @@ export const AdminDashboardPage: React.FC = () => {
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-slate-300 mb-1 font-semibold">ชื่อโจทย์ (Title)</label>
-                  <input
-                    type="text"
-                    required
-                    value={problemForm.title}
-                    onChange={(e) => setProblemForm({ ...problemForm, title: e.target.value })}
-                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-slate-300 mb-1 font-semibold">Slug</label>
-                  <input
-                    type="text"
-                    required
-                    value={problemForm.slug}
-                    onChange={(e) => setProblemForm({ ...problemForm, slug: e.target.value })}
-                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-slate-300 mb-1 font-semibold">Difficulty</label>
+                <div className="space-y-1">
+                  <label className="text-slate-300 font-medium">ระดับความยาก</label>
                   <select
                     value={problemForm.difficulty}
                     onChange={(e) => setProblemForm({ ...problemForm, difficulty: e.target.value as Difficulty })}
-                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white"
+                    className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-indigo-500"
                   >
-                    <option value="EASY">EASY</option>
-                    <option value="MEDIUM">MEDIUM</option>
-                    <option value="HARD">HARD</option>
+                    <option value="EASY">EASY (ง่าย)</option>
+                    <option value="MEDIUM">MEDIUM (ปานกลาง)</option>
+                    <option value="HARD">HARD (ยาก)</option>
                   </select>
                 </div>
+              </div>
 
-                <div>
-                  <label className="block text-slate-300 mb-1 font-semibold">คะแนน (Points)</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-slate-300 font-medium">ชื่อโจทย์ (Title)</label>
                   <input
-                    type="number"
+                    type="text"
                     required
-                    value={problemForm.points}
-                    onChange={(e) => setProblemForm({ ...problemForm, points: parseInt(e.target.value) })}
-                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white"
+                    placeholder="เช่น ตรวจสอบเลขคู่หรือคี่"
+                    value={problemForm.title}
+                    onChange={(e) => setProblemForm({ ...problemForm, title: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-slate-300 font-medium">Slug (URL friendly)</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="เช่น even-or-odd"
+                    value={problemForm.slug}
+                    onChange={(e) => setProblemForm({ ...problemForm, slug: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white font-mono focus:outline-none focus:border-indigo-500"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="block text-slate-300 mb-1 font-semibold">คำอธิบายโจทย์ (Description)</label>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <label className="text-slate-300 font-medium">คะแนน (Points)</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={problemForm.points}
+                    onChange={(e) => setProblemForm({ ...problemForm, points: parseInt(e.target.value) || 10 })}
+                    className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-slate-300 font-medium">Time Limit (ms)</label>
+                  <input
+                    type="number"
+                    min={100}
+                    value={problemForm.time_limit_ms}
+                    onChange={(e) => setProblemForm({ ...problemForm, time_limit_ms: parseInt(e.target.value) || 1000 })}
+                    className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-slate-300 font-medium">Memory (MB)</label>
+                  <input
+                    type="number"
+                    min={16}
+                    value={problemForm.memory_limit_mb}
+                    onChange={(e) => setProblemForm({ ...problemForm, memory_limit_mb: parseInt(e.target.value) || 128 })}
+                    className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-medium">รายละเอียดโจทย์ (Description)</label>
                 <textarea
+                  rows={4}
                   required
-                  rows={3}
+                  placeholder="เขียนอธิบายโจทย์และสิ่งที่ต้องการให้โปรแกรมทำ..."
                   value={problemForm.description}
                   onChange={(e) => setProblemForm({ ...problemForm, description: e.target.value })}
-                  className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white"
+                  className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-indigo-500 leading-relaxed"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-slate-300 mb-1 font-semibold">Input Description</label>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-slate-300 font-medium">คำอธิบาย Input</label>
                   <textarea
-                    required
                     rows={2}
+                    placeholder="เช่น จำนวนเต็ม N หนึ่งตัว..."
                     value={problemForm.input_description}
                     onChange={(e) => setProblemForm({ ...problemForm, input_description: e.target.value })}
-                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white"
+                    className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-indigo-500"
                   />
                 </div>
-                <div>
-                  <label className="block text-slate-300 mb-1 font-semibold">Output Description</label>
+
+                <div className="space-y-1">
+                  <label className="text-slate-300 font-medium">คำอธิบาย Output</label>
                   <textarea
-                    required
                     rows={2}
+                    placeholder="เช่น พิมพ์คำว่า Even หรือ Odd..."
                     value={problemForm.output_description}
                     onChange={(e) => setProblemForm({ ...problemForm, output_description: e.target.value })}
-                    className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-white"
+                    className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-indigo-500"
                   />
                 </div>
               </div>
 
+              <div className="space-y-1">
+                <label className="text-slate-300 font-medium">เงื่อนไข / ขอบเขตข้อมูล (Constraints)</label>
+                <input
+                  type="text"
+                  placeholder="เช่น 1 <= N <= 100,000"
+                  value={problemForm.constraints_text}
+                  onChange={(e) => setProblemForm({ ...problemForm, constraints_text: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white font-mono focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              {/* Sample Testcase on Create */}
               {!editingProblem && (
-                <div className="p-4 rounded-xl bg-slate-900/80 border border-indigo-500/20 space-y-3 font-sans">
-                  <div className="flex items-center gap-2 text-indigo-400 font-bold text-xs">
-                    <Sparkles className="w-4 h-4" />
-                    <span>ชุดข้อมูลตัวอย่างเริ่มต้น (Sample Test Case - แสดงให้ผู้เรียนเห็นทันที)</span>
+                <div className="p-3.5 rounded-xl bg-indigo-950/20 border border-indigo-500/20 space-y-2.5">
+                  <span className="text-[11px] font-bold text-indigo-300 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>ข้อมูลทดสอบตัวอย่างเริ่มต้น (Sample Testcase)</span>
+                  </span>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <textarea
+                      rows={2}
+                      placeholder="Input ตัวอย่าง เช่น 4"
+                      value={problemForm.sample_input}
+                      onChange={(e) => setProblemForm({ ...problemForm, sample_input: e.target.value })}
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-black/50 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
+                    />
+                    <textarea
+                      rows={2}
+                      placeholder="Expected Output เช่น Even"
+                      value={problemForm.sample_output}
+                      onChange={(e) => setProblemForm({ ...problemForm, sample_output: e.target.value })}
+                      className="w-full px-2.5 py-1.5 rounded-lg bg-black/50 border border-white/10 text-white font-mono text-xs focus:outline-none focus:border-indigo-500"
+                    />
                   </div>
-                  <div className="grid grid-cols-2 gap-3 text-xs font-mono">
-                    <div>
-                      <label className="block text-slate-300 mb-1 font-sans font-medium">Sample Input:</label>
-                      <textarea
-                        rows={2}
-                        value={problemForm.sample_input}
-                        onChange={(e) => setProblemForm({ ...problemForm, sample_input: e.target.value })}
-                        placeholder="เช่น: 5 7"
-                        className="w-full p-2 rounded-lg bg-slate-950 border border-slate-800 text-emerald-300"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-slate-300 mb-1 font-sans font-medium">Sample Expected Output:</label>
-                      <textarea
-                        rows={2}
-                        value={problemForm.sample_output}
-                        onChange={(e) => setProblemForm({ ...problemForm, sample_output: e.target.value })}
-                        placeholder="เช่น: 12"
-                        className="w-full p-2 rounded-lg bg-slate-950 border border-slate-800 text-indigo-300"
-                      />
-                    </div>
-                  </div>
-                  <p className="text-[11px] text-slate-400 font-sans">
-                    * ระบบจะสร้างเป็น Test Case ตัวอย่าง (Sample) ให้อัตโนมัติ โดยจะแสดงในแท็บ "ชุดข้อมูลตัวอย่าง" ในหน้าโจทย์
-                  </p>
                 </div>
               )}
 
-              <div className="flex items-center space-x-2 pt-2">
+              <label className="flex items-center space-x-2 cursor-pointer pt-1">
                 <input
                   type="checkbox"
-                  id="prob_pub"
                   checked={problemForm.is_published}
                   onChange={(e) => setProblemForm({ ...problemForm, is_published: e.target.checked })}
-                  className="rounded bg-slate-900 border-slate-800 text-indigo-600 focus:ring-0"
+                  className="w-4 h-4 rounded text-emerald-600 focus:ring-0 bg-slate-900 border-slate-700"
                 />
-                <label htmlFor="prob_pub" className="text-slate-300">
-                  เผยแพร่โจทย์ (Published)
-                </label>
-              </div>
+                <span className="text-slate-300">เผยแพร่โจทย์ทันที (Published)</span>
+              </label>
 
-              <div className="flex items-center justify-end space-x-2 pt-4 border-t border-slate-800">
+              <div className="flex items-center justify-end space-x-2 pt-4 border-t border-white/10">
                 <button
                   type="button"
                   onClick={() => setProblemModalOpen(false)}
-                  className="px-4 py-2 text-slate-400 hover:text-white"
+                  className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 transition-colors"
                 >
                   ยกเลิก
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold"
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shadow-md shadow-emerald-600/20 transition-all"
                 >
-                  บันทึกโจทย์
+                  {editingProblem ? "บันทึกการแก้ไข" : "สร้างโจทย์"}
                 </button>
               </div>
             </form>
@@ -966,133 +1584,120 @@ export const AdminDashboardPage: React.FC = () => {
         </div>
       )}
 
-      {/* Add / Edit Test Case Modal */}
+      {/* ========================================================= */}
+      {/* MODAL 3: TEST CASE CREATE / EDIT */}
+      {/* ========================================================= */}
       {tcModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-lg p-6 rounded-2xl glass-panel bg-[#0d121f] border border-white/10 space-y-4">
-            <h3 className="text-lg font-bold text-white">
-              {editingTc ? "แก้ไข Test Case" : "เพิ่ม Test Case"} สำหรับโจทย์ #{selectedProblemId}
-            </h3>
-
-            <form onSubmit={handleSaveTestCase} className="space-y-4 text-xs font-mono">
-              <div className="space-y-2 font-sans">
-                <label className="block text-slate-300 font-semibold">ประเภท Test Case:</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setTcForm({ ...tcForm, is_hidden: false })}
-                    className={`p-3 rounded-xl border text-left flex items-start gap-2.5 transition-all ${
-                      !tcForm.is_hidden
-                        ? "bg-emerald-500/15 border-emerald-500/50 text-white shadow-md shadow-emerald-500/10"
-                        : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
-                    }`}
-                  >
-                    <Eye className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-                    <div>
-                      <div className="font-bold text-xs text-emerald-300">ตัวอย่าง (Sample)</div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">แสดงตัวอย่างให้ผู้เรียนเห็นในหน้าโจทย์</div>
-                    </div>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setTcForm({ ...tcForm, is_hidden: true })}
-                    className={`p-3 rounded-xl border text-left flex items-start gap-2.5 transition-all ${
-                      tcForm.is_hidden
-                        ? "bg-amber-500/15 border-amber-500/50 text-white shadow-md shadow-amber-500/10"
-                        : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
-                    }`}
-                  >
-                    <EyeOff className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
-                    <div>
-                      <div className="font-bold text-xs text-amber-300">ซ่อนไว้ (Hidden)</div>
-                      <div className="text-[11px] text-slate-400 mt-0.5">ใช้ตรวจคำตอบตอน Submit เท่านั้น</div>
-                    </div>
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-slate-300 mb-1 font-sans font-semibold">Input Data:</label>
-                <textarea
-                  rows={3}
-                  value={tcForm.input_data}
-                  onChange={(e) => setTcForm({ ...tcForm, input_data: e.target.value })}
-                  placeholder="เช่น: 10 20 (เว้นว่างไว้ได้หากโจทย์ไม่มี input)"
-                  className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-emerald-300"
-                />
-              </div>
-
-              <div>
-                <label className="block text-slate-300 mb-1 font-sans font-semibold">Expected Output (ผลลัพธ์ที่ถูกต้อง):</label>
-                <textarea
-                  required
-                  rows={3}
-                  value={tcForm.expected_output}
-                  onChange={(e) => setTcForm({ ...tcForm, expected_output: e.target.value })}
-                  placeholder="เช่น: 30"
-                  className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-indigo-300"
-                />
-              </div>
-
-              <div className="flex items-center space-x-2 pt-1 font-sans">
-                <span className="text-slate-400 font-semibold">คะแนน (Points):</span>
-                <input
-                  type="number"
-                  min={1}
-                  value={tcForm.points}
-                  onChange={(e) => setTcForm({ ...tcForm, points: parseInt(e.target.value) || 1 })}
-                  className="w-20 p-2 rounded-lg bg-slate-900 border border-slate-800 text-white text-center font-bold"
-                />
-              </div>
-
-              <div className="flex items-center justify-end space-x-2 pt-4 border-t border-slate-800 font-sans">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTcModalOpen(false);
-                    setEditingTc(null);
-                  }}
-                  className="px-4 py-2 text-slate-400 hover:text-white"
-                >
-                  ยกเลิก
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold"
-                >
-                  {editingTc ? "อัปเดต Test Case" : "บันทึก Test Case"}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Code Viewer Modal */}
-      {codeViewerModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-          <div className="w-full max-w-2xl p-6 rounded-2xl glass-panel bg-[#0d121f] border border-white/10 space-y-4 max-h-[85vh] flex flex-col">
-            <div className="flex items-center justify-between pb-2 border-b border-white/5">
-              <div>
-                <h3 className="text-base font-bold text-white">
-                  โค้ด Submission #{codeViewerModal.id}
-                </h3>
-                <span className="text-xs text-slate-400">
-                  User #{codeViewerModal.userId} • Status: {codeViewerModal.status}
-                </span>
-              </div>
-              <button
-                onClick={() => setCodeViewerModal(null)}
-                className="text-slate-400 hover:text-white text-sm"
-              >
-                ปิด ✕
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setTcModalOpen(false)} />
+          <div className="relative w-full max-w-lg rounded-2xl bg-[#0c101c] border border-white/10 p-6 shadow-2xl z-10 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <h3 className="text-base font-bold text-white">
+                {editingTc ? "แก้ไข Test Case" : "เพิ่ม Test Case ใหม่"}
+              </h3>
+              <button onClick={() => setTcModalOpen(false)} className="p-1 text-slate-400 hover:text-white">
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            <pre className="flex-1 p-4 rounded-xl bg-black/60 border border-white/5 font-mono text-xs text-emerald-300 overflow-y-auto whitespace-pre-wrap">
+            <form onSubmit={handleSaveTestCase} className="space-y-4 text-xs">
+              <div className="space-y-1">
+                <label className="text-slate-300 font-medium">Input Data (Standard Input)</label>
+                <textarea
+                  rows={3}
+                  placeholder="ข้อมูลนำเข้าที่ส่งผ่าน stdin..."
+                  value={tcForm.input_data}
+                  onChange={(e) => setTcForm({ ...tcForm, input_data: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white font-mono focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-slate-300 font-medium">Expected Output (ผลลัพธ์ที่ถูกต้อง)</label>
+                <textarea
+                  rows={3}
+                  required
+                  placeholder="ผลลัพธ์ที่คาดหวัง..."
+                  value={tcForm.expected_output}
+                  onChange={(e) => setTcForm({ ...tcForm, expected_output: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white font-mono focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <label className="text-slate-300 font-medium">คะแนนของเคสนี้</label>
+                  <input
+                    type="number"
+                    min={1}
+                    value={tcForm.points}
+                    onChange={(e) => setTcForm({ ...tcForm, points: parseInt(e.target.value) || 5 })}
+                    className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-indigo-500"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-slate-300 font-medium">ประเภทการแสดงผล</label>
+                  <select
+                    value={tcForm.is_hidden ? "true" : "false"}
+                    onChange={(e) => setTcForm({ ...tcForm, is_hidden: e.target.value === "true" })}
+                    className="w-full px-3 py-2 rounded-xl bg-black/40 border border-white/10 text-white focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="false">ตัวอย่าง (Sample - แสดงให้เห็น)</option>
+                    <option value="true">ลับ (Hidden - ใช้ตรวจจริง)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end space-x-2 pt-4 border-t border-white/10">
+                <button
+                  type="button"
+                  onClick={() => setTcModalOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-300 transition-colors"
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold shadow-md shadow-emerald-600/20 transition-all"
+                >
+                  {editingTc ? "บันทึก Test Case" : "เพิ่ม Test Case"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL 4: SUBMISSION CODE INSPECTOR */}
+      {/* ========================================================= */}
+      {codeViewerModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setCodeViewerModal(null)} />
+          <div className="relative w-full max-w-2xl rounded-2xl bg-[#0c101c] border border-white/10 p-6 shadow-2xl z-10 space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between pb-3 border-b border-white/10">
+              <div>
+                <h3 className="text-base font-bold text-white">Submission #{codeViewerModal.id} Source Code</h3>
+                <span className="text-xs text-slate-400">สถานะ: {codeViewerModal.status}</span>
+              </div>
+              <button onClick={() => setCodeViewerModal(null)} className="p-1 text-slate-400 hover:text-white">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <pre className="p-4 rounded-xl bg-[#060810] border border-white/5 text-slate-200 font-mono text-xs overflow-x-auto max-h-[60vh] leading-relaxed">
               {codeViewerModal.code}
             </pre>
+
+            <div className="flex justify-end">
+              <button
+                onClick={() => setCodeViewerModal(null)}
+                className="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-xs font-semibold"
+              >
+                ปิด
+              </button>
+            </div>
           </div>
         </div>
       )}

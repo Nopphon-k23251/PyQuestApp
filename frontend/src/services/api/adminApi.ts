@@ -15,11 +15,11 @@ export const adminApi = {
     );
   },
 
-  createCourse: (data: Partial<Course>) => {
+  createCourse: (data: any) => {
     return api.post<Course>("/admin/courses", data);
   },
 
-  updateCourse: (courseId: number, data: Partial<Course>) => {
+  updateCourse: (courseId: number, data: any) => {
     return api.patch<Course>(`/admin/courses/${courseId}`, data);
   },
 

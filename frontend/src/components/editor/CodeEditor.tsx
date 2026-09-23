@@ -1,5 +1,6 @@
 import React, { useRef } from "react";
 import Editor, { OnMount, Monaco } from "@monaco-editor/react";
+import { PYTHON_COMPLETIONS } from "./pythonCompletions";
 
 interface CodeEditorProps {
   value: string;
@@ -70,65 +71,37 @@ export const CodeEditor: React.FC<CodeEditorProps> = ({
               endColumn: word.endColumn,
             };
 
-            const suggestions = [
-              {
-                label: "input_split",
-                kind: monaco.languages.CompletionItemKind.Snippet,
-                insertText: "${1:a}, ${2:b} = map(int, input().split())",
-                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                documentation: "Read space-separated integers from input",
-                range,
-              },
-              {
-                label: "input_int",
-                kind: monaco.languages.CompletionItemKind.Snippet,
-                insertText: "${1:n} = int(input().strip())",
-                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                documentation: "Read a single integer from input",
-                range,
-              },
-              {
-                label: "input_list",
-                kind: monaco.languages.CompletionItemKind.Snippet,
-                insertText: "${1:arr} = list(map(int, input().split()))",
-                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                documentation: "Read a list of integers from input",
-                range,
-              },
-              {
-                label: "main_func",
-                kind: monaco.languages.CompletionItemKind.Snippet,
-                insertText: "def main():\n    ${1:pass}\n\nif __name__ == '__main__':\n    main()",
-                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                documentation: "Boilerplate main function",
-                range,
-              },
-              {
-                label: "for_range",
-                kind: monaco.languages.CompletionItemKind.Snippet,
-                insertText: "for ${1:i} in range(${2:n}):\n    ${3:pass}",
-                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                documentation: "For loop with range",
-                range,
-              },
-              {
-                label: "print",
-                kind: monaco.languages.CompletionItemKind.Function,
-                insertText: "print(${1:})",
-                insertTextRules: monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet,
-                documentation: "Built-in print function",
-                range,
-              },
-              {
-                label: "sys_stdin",
-                kind: monaco.languages.CompletionItemKind.Snippet,
-                insertText: "import sys\ninput = sys.stdin.read",
-                documentation: "Fast I/O with sys.stdin",
-                range,
-              },
-            ];
+        const getMonacoKind = (kind: string) => {
+          switch (kind) {
+            case "Function":
+              return monaco.languages.CompletionItemKind.Function;
+            case "Method":
+              return monaco.languages.CompletionItemKind.Method;
+            case "Snippet":
+              return monaco.languages.CompletionItemKind.Snippet;
+            case "Keyword":
+              return monaco.languages.CompletionItemKind.Keyword;
+            case "Module":
+              return monaco.languages.CompletionItemKind.Module;
+            default:
+              return monaco.languages.CompletionItemKind.Property;
+          }
+        };
 
-            return { suggestions };
+        const suggestions = PYTHON_COMPLETIONS.map((item) => ({
+          label: item.label,
+          kind: getMonacoKind(item.kind),
+          insertText: item.insertText,
+          insertTextRules: item.isSnippet
+            ? monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet
+            : undefined,
+          documentation: {
+            value: item.documentation,
+          },
+          range,
+        }));
+
+        return { suggestions };
           },
         });
       } catch {
