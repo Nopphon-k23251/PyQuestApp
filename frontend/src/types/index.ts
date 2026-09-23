@@ -47,6 +47,7 @@ export interface ProblemListItem {
   isPublished: boolean;
   isSolved: boolean;
   isStarred: boolean;
+  topic?: string;
 }
 
 export interface CourseDetail extends Course {

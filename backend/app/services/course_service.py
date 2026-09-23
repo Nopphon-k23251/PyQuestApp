@@ -11,6 +11,61 @@ from app.schemas.problem import ProblemListItemResponse
 from app.repositories.course_repository import CourseRepository
 
 
+# 8-Module curriculum order from easy to hard
+PROBLEM_TOPIC_CONFIG = [
+    # 1. Basic (Easy)
+    ("calculate-sum", "พื้นฐานและตัวแปร"),
+    ("rectangle-area", "พื้นฐานและตัวแปร"),
+    ("bmi-calculator", "พื้นฐานและตัวแปร"),
+    ("seconds-converter", "พื้นฐานและตัวแปร"),
+
+    # 2. Condition (Easy)
+    ("even-or-odd", "เงื่อนไขและการตัดสินใจ"),
+    ("grade-calculator", "เงื่อนไขและการตัดสินใจ"),
+    ("leap-year-checker", "เงื่อนไขและการตัดสินใจ"),
+    ("max-of-three", "เงื่อนไขและการตัดสินใจ"),
+    ("quadrant-finder", "เงื่อนไขและการตัดสินใจ"),
+
+    # 3. Loop (Easy)
+    ("multiplication-table", "การวนซ้ำและการทำซ้ำ"),
+    ("sum-of-even-numbers", "การวนซ้ำและการทำซ้ำ"),
+    ("factorial-calculator", "การวนซ้ำและการทำซ้ำ"),
+    ("star-pyramid", "การวนซ้ำและการทำซ้ำ"),
+    ("countdown-blastoff", "การวนซ้ำและการทำซ้ำ"),
+
+    # 4. String (Easy -> Medium)
+    ("reverse-a-string", "ข้อความและสตริงเมธอด"),
+    ("vowel-counter", "ข้อความและสตริงเมธอด"),
+    ("palindrome-checker", "ข้อความและสตริงเมธอด"),
+    ("word-censor", "ข้อความและสตริงเมธอด"),
+    ("acronym-generator", "ข้อความและสตริงเมธอด"),
+
+    # 5. List (Medium)
+    ("find-the-maximum-value", "ลิสต์และลิสต์เมธอด"),
+    ("unique-and-sorted", "ลิสต์และลิสต์เมธอด"),
+    ("filter-even-numbers", "ลิสต์และลิสต์เมธอด"),
+    ("cumulative-sum", "ลิสต์และลิสต์เมธอด"),
+
+    # 6. Dict (Medium)
+    ("character-frequency", "ดิกชันนารีและคู่ข้อมูล"),
+    ("word-frequency", "ดิกชันนารีและคู่ข้อมูล"),
+    ("student-score-lookup", "ดิกชันนารีและคู่ข้อมูล"),
+
+    # 7. Function (Medium)
+    ("is-prime-function", "การสร้างและใช้งานฟังก์ชัน"),
+    ("gcd-and-lcm", "การสร้างและใช้งานฟังก์ชัน"),
+    ("fibonacci-term", "การสร้างและใช้งานฟังก์ชัน"),
+
+    # 8. Recap (Hard)
+    ("shopping-cart-bill", "แบบฝึกหัดทบทวนและโจทย์ประยุกต์"),
+    ("anagram-checker", "แบบฝึกหัดทบทวนและโจทย์ประยุกต์"),
+    ("student-ranking", "แบบฝึกหัดทบทวนและโจทย์ประยุกต์"),
+]
+
+SLUG_TO_ORDER = {slug: idx for idx, (slug, _) in enumerate(PROBLEM_TOPIC_CONFIG)}
+SLUG_TO_TOPIC = {slug: topic for slug, topic in PROBLEM_TOPIC_CONFIG}
+
+
 class CourseService:
     def __init__(self, db: Session):
         self.db = db
@@ -72,11 +127,12 @@ class CourseService:
         total_probs, solved_probs = self.course_repo.get_problem_stats(course.id, user_id=user_id, published_only=published_only)
         pct = (solved_probs / total_probs * 100.0) if total_probs > 0 else 0.0
 
-        # Load problems
+        # Load problems and sort strictly by curriculum topic order (easy -> hard)
         prob_query = self.db.query(Problem).filter(Problem.course_id == course.id)
         if published_only:
             prob_query = prob_query.filter(Problem.is_published == True)
-        problems = prob_query.order_by(Problem.id.asc()).all()
+        raw_problems = prob_query.all()
+        problems = sorted(raw_problems, key=lambda p: (SLUG_TO_ORDER.get(p.slug, 9999), p.id))
 
         # Query user solved and starred status
         solved_problem_ids = set()
@@ -107,6 +163,7 @@ class CourseService:
                 is_published=p.is_published,
                 is_solved=p.id in solved_problem_ids,
                 is_starred=p.id in starred_problem_ids,
+                topic=SLUG_TO_TOPIC.get(p.slug, "ทั่วไป"),
             )
             for p in problems
         ]

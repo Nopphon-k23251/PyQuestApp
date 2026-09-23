@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { useParams, Link } from "react-router-dom";
 import {
   BookOpen,
@@ -11,11 +11,13 @@ import {
   Award,
   Clock,
   Sparkles,
+  Layers,
+  Filter,
 } from "lucide-react";
 import { courseApi } from "../services/api/courseApi";
 import { problemApi } from "../services/api/problemApi";
 import { useAuth } from "../features/auth/AuthContext";
-import { CourseDetail, ProblemListItem } from "../types";
+import { CourseDetail, ProblemListItem, Difficulty } from "../types";
 
 export const CourseDetailPage: React.FC = () => {
   const { courseId } = useParams<{ courseId: string }>();
@@ -100,10 +102,74 @@ export const CourseDetailPage: React.FC = () => {
     );
   }
 
-  const problemsList = course.problems || (course as any).problemList || [];
+  const TOPIC_LIST = [
+    "พื้นฐานและตัวแปร",
+    "เงื่อนไขและการตัดสินใจ",
+    "การวนซ้ำและการทำซ้ำ",
+    "ข้อความและสตริงเมธอด",
+    "ลิสต์และลิสต์เมธอด",
+    "ดิกชันนารีและคู่ข้อมูล",
+    "การสร้างและใช้งานฟังก์ชัน",
+    "แบบฝึกหัดทบทวนและโจทย์ประยุกต์",
+  ];
+
+  const [selectedTopic, setSelectedTopic] = useState<string>("ALL");
+
+  const problemsList: ProblemListItem[] = course.problems || (course as any).problemList || [];
   const total = course.totalProblems ?? (course as any).total_problems ?? problemsList.length;
   const solved = course.solvedProblems ?? (course as any).solved_problems ?? problemsList.filter((p: any) => p.isSolved || p.is_solved).length;
   const pct = total > 0 ? (solved / total) * 100 : 0;
+
+  const topicStats = useMemo(() => {
+    const stats: Record<string, { total: number; solved: number }> = {};
+    TOPIC_LIST.forEach((t) => {
+      stats[t] = { total: 0, solved: 0 };
+    });
+
+    problemsList.forEach((p: any) => {
+      const t = p.topic || "ทั่วไป";
+      if (!stats[t]) {
+        stats[t] = { total: 0, solved: 0 };
+      }
+      stats[t].total += 1;
+      if (p.isSolved || p.is_solved) {
+        stats[t].solved += 1;
+      }
+    });
+    return stats;
+  }, [problemsList]);
+
+  const visibleTopics = useMemo(() => {
+    if (selectedTopic !== "ALL") {
+      return [selectedTopic];
+    }
+    return TOPIC_LIST.filter((t) => (topicStats[t]?.total ?? 0) > 0);
+  }, [selectedTopic, topicStats]);
+
+  const getDifficultyBadge = (diff: string) => {
+    switch (diff?.toUpperCase()) {
+      case "EASY":
+        return (
+          <span className="px-2 py-0.5 text-[11px] font-semibold rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+            EASY
+          </span>
+        );
+      case "MEDIUM":
+        return (
+          <span className="px-2 py-0.5 text-[11px] font-semibold rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            MEDIUM
+          </span>
+        );
+      case "HARD":
+        return (
+          <span className="px-2 py-0.5 text-[11px] font-semibold rounded bg-rose-500/10 text-rose-400 border border-rose-500/20">
+            HARD
+          </span>
+        );
+      default:
+        return null;
+    }
+  };
 
   return (
     <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-8">
@@ -124,10 +190,12 @@ export const CourseDetailPage: React.FC = () => {
           <div className="space-y-2">
             <div className="flex items-center space-x-2.5">
               <span className="px-3 py-1 rounded-full text-xs font-bold bg-indigo-500/10 text-indigo-300 border border-indigo-500/20">
-                {course.difficulty}
+                {course.slug === "python-fundamentals"
+                  ? "ครบทุกระดับ (EASY - HARD)"
+                  : course.difficulty}
               </span>
               <span className="text-xs text-slate-400 font-medium">
-                {total} ข้อโจทย์
+                8 หมวดหมู่ • {total} ข้อโจทย์
               </span>
             </div>
             <h1 className="text-3xl font-extrabold text-white tracking-tight">
@@ -137,7 +205,7 @@ export const CourseDetailPage: React.FC = () => {
 
           {/* Progress Summary Card */}
           <div className="p-4 rounded-xl bg-slate-900/80 border border-slate-800 text-right min-w-[160px]">
-            <span className="text-xs text-slate-400 block mb-1">ความคืบหน้า</span>
+            <span className="text-xs text-slate-400 block mb-1">ความคืบหน้ารวม</span>
             <div className="text-2xl font-bold text-white">
               {solved} / {total}
             </div>
@@ -155,102 +223,194 @@ export const CourseDetailPage: React.FC = () => {
         </p>
       </div>
 
-      {/* Problems List */}
-      <div className="space-y-4">
+      {/* Topic Filter Pills */}
+      <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold text-white tracking-tight flex items-center gap-2">
-            <Sparkles className="w-5 h-5 text-indigo-400" />
-            <span>รายการโจทย์สำหรับฝึกฝน</span>
-          </h2>
+          <div className="flex items-center space-x-2 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+            <Filter className="w-3.5 h-3.5 text-indigo-400" />
+            <span>เลือกดูตามหัวข้อการเรียนรู้</span>
+          </div>
           <span className="text-xs text-slate-400">
             สำเร็จแล้ว {solved} จาก {total} ข้อ
           </span>
         </div>
 
-        {problemsList.length === 0 ? (
-          <div className="p-8 rounded-2xl glass-panel text-center text-slate-400 text-sm">
-            ยังไม่มีโจทย์ที่เผยแพร่ในคอร์สนี้
-          </div>
-        ) : (
-          <div className="space-y-2.5">
-            {problemsList.map((problem: any, index: number) => {
-              const isSolved = problem.isSolved ?? problem.is_solved ?? false;
-              const isStarred = problem.isStarred ?? problem.is_starred ?? false;
-
-              return (
-                <div
-                  key={problem.id}
-                  className="flex items-center justify-between p-4 rounded-xl glass-panel glass-panel-hover border border-white/5 transition-all group"
+        <div className="flex items-center gap-2 overflow-x-auto pb-2 scrollbar-thin">
+          <button
+            type="button"
+            onClick={() => setSelectedTopic("ALL")}
+            className={`px-3.5 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+              selectedTopic === "ALL"
+                ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                : "glass-panel text-slate-400 hover:text-white hover:bg-slate-800/60"
+            }`}
+          >
+            ทั้งหมด ({total} ข้อ)
+          </button>
+          {TOPIC_LIST.map((topic) => {
+            const tStat = topicStats[topic] || { total: 0, solved: 0 };
+            if (tStat.total === 0) return null;
+            const isSelected = selectedTopic === topic;
+            return (
+              <button
+                type="button"
+                key={topic}
+                onClick={() => setSelectedTopic(topic)}
+                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold whitespace-nowrap transition-all ${
+                  isSelected
+                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                    : "glass-panel text-slate-400 hover:text-white hover:bg-slate-800/60"
+                }`}
+              >
+                <span>{topic}</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded-md font-mono ${
+                    isSelected
+                      ? "bg-white/20 text-white"
+                      : "bg-slate-800 text-slate-400"
+                  }`}
                 >
-                  <div className="flex items-center space-x-4 min-w-0">
-                    {/* Status Indicator */}
-                    <div>
-                      {isSolved ? (
-                        <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                      ) : (
-                        <Circle className="w-5 h-5 text-slate-600" />
-                      )}
-                    </div>
+                  {tStat.solved}/{tStat.total}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
 
-                    <div className="space-y-0.5 min-w-0">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-xs font-mono text-slate-500">
-                          #{index + 1}
-                        </span>
-                        <Link
-                          to={`/problems/${problem.id}`}
-                          className="text-base font-semibold text-white group-hover:text-indigo-300 transition-colors truncate"
-                        >
-                          {problem.title}
-                        </Link>
-                      </div>
-                      <div className="flex items-center space-x-2 text-xs text-slate-400">
-                        <span className="font-medium text-slate-400">
-                          {problem.difficulty}
-                        </span>
-                        <span>•</span>
-                        <span className="text-amber-400 font-semibold">
-                          +{problem.points} คะแนน
-                        </span>
-                      </div>
-                    </div>
+      {/* Problems by Topic */}
+      {problemsList.length === 0 ? (
+        <div className="p-8 rounded-2xl glass-panel text-center text-slate-400 text-sm">
+          ยังไม่มีโจทย์ที่เผยแพร่ในคอร์สนี้
+        </div>
+      ) : (
+        <div className="space-y-8">
+          {visibleTopics.map((topic) => {
+            const topicProblems = problemsList.filter(
+              (p: any) => (p.topic || "ทั่วไป") === topic
+            );
+            if (topicProblems.length === 0) return null;
+            const tStat = topicStats[topic] || { total: topicProblems.length, solved: 0 };
+            const tPct = tStat.total > 0 ? (tStat.solved / tStat.total) * 100 : 0;
+
+            return (
+              <div key={topic} className="space-y-3">
+                {/* Topic Header without number prefix */}
+                <div className="flex items-center justify-between pb-2 border-b border-white/5">
+                  <div className="flex items-center space-x-2.5">
+                    <div className="w-2 h-2 rounded-full bg-indigo-400" />
+                    <h3 className="text-base font-bold text-white tracking-tight">
+                      {topic}
+                    </h3>
+                    <span className="text-xs text-slate-400 font-normal">
+                      ({topicProblems.length} ข้อ)
+                    </span>
                   </div>
 
-                  <div className="flex items-center space-x-3 shrink-0">
-                    {/* Star Toggle */}
-                    <button
-                      onClick={(e) => handleToggleStar(problem.id, e)}
-                      title={isStarred ? "ยกเลิกติดดาว" : "ติดดาวโจทย์นี้"}
-                      className={`p-2 rounded-lg transition-colors ${
-                        isStarred
-                          ? "text-amber-400 bg-amber-500/10"
-                          : "text-slate-500 hover:text-amber-400 hover:bg-slate-800"
-                      }`}
-                    >
-                      <Star
-                        className={`w-4 h-4 ${isStarred ? "fill-amber-400" : ""}`}
+                  <div className="flex items-center space-x-3">
+                    <span className="text-xs text-slate-400">
+                      ผ่านแล้ว{" "}
+                      <span className="text-emerald-400 font-semibold">
+                        {tStat.solved}
+                      </span>
+                      /{tStat.total} ข้อ
+                    </span>
+                    <div className="w-16 h-1.5 rounded-full bg-slate-800 overflow-hidden hidden sm:block">
+                      <div
+                        className="h-full bg-emerald-400 rounded-full transition-all duration-300"
+                        style={{ width: `${tPct}%` }}
                       />
-                    </button>
-
-                    {/* Solve Button */}
-                    <Link
-                      to={`/problems/${problem.id}`}
-                      className={`flex items-center space-x-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all transform active:scale-95 ${
-                        isSolved
-                          ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25"
-                          : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20"
-                      }`}
-                    >
-                      <span>{isSolved ? "ทำซ้ำ (Review)" : "เริ่มทำโจทย์"}</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </Link>
+                    </div>
                   </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+
+                {/* Problem Cards */}
+                <div className="space-y-2.5">
+                  {topicProblems.map((problem: any) => {
+                    const globalIndex =
+                      problemsList.findIndex((p: any) => p.id === problem.id) + 1;
+                    const isSolved = problem.isSolved ?? problem.is_solved ?? false;
+                    const isStarred = problem.isStarred ?? problem.is_starred ?? false;
+
+                    return (
+                      <div
+                        key={problem.id}
+                        className="flex items-center justify-between p-4 rounded-xl glass-panel glass-panel-hover border border-white/5 transition-all group"
+                      >
+                        <div className="flex items-center space-x-4 min-w-0">
+                          {/* Status Indicator */}
+                          <div>
+                            {isSolved ? (
+                              <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                            ) : (
+                              <Circle className="w-5 h-5 text-slate-600 shrink-0" />
+                            )}
+                          </div>
+
+                          <div className="space-y-1 min-w-0">
+                            <div className="flex items-center space-x-2">
+                              <span className="text-xs font-mono text-slate-500 shrink-0">
+                                #{globalIndex}
+                              </span>
+                              <Link
+                                to={`/problems/${problem.id}`}
+                                className="text-base font-semibold text-white group-hover:text-indigo-300 transition-colors truncate"
+                              >
+                                {problem.title}
+                              </Link>
+                            </div>
+                            <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                              {getDifficultyBadge(problem.difficulty)}
+                              <span className="px-2 py-0.5 rounded text-[10px] bg-white/5 text-slate-400 border border-white/5">
+                                {problem.topic || "ทั่วไป"}
+                              </span>
+                              <span>•</span>
+                              <span className="text-amber-400 font-semibold">
+                                +{problem.points} คะแนน
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center space-x-3 shrink-0 ml-3">
+                          {/* Star Toggle */}
+                          <button
+                            type="button"
+                            onClick={(e) => handleToggleStar(problem.id, e)}
+                            title={isStarred ? "ยกเลิกติดดาว" : "ติดดาวโจทย์นี้"}
+                            className={`p-2 rounded-lg transition-colors ${
+                              isStarred
+                                ? "text-amber-400 bg-amber-500/10"
+                                : "text-slate-500 hover:text-amber-400 hover:bg-slate-800"
+                            }`}
+                          >
+                            <Star
+                              className={`w-4 h-4 ${isStarred ? "fill-amber-400" : ""}`}
+                            />
+                          </button>
+
+                          {/* Solve Button */}
+                          <Link
+                            to={`/problems/${problem.id}`}
+                            className={`flex items-center space-x-1.5 px-4 py-2 rounded-lg text-xs font-semibold transition-all transform active:scale-95 ${
+                              isSolved
+                                ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/25"
+                                : "bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-600/20"
+                            }`}
+                          >
+                            <span>{isSolved ? "ทำซ้ำ (Review)" : "เริ่มทำโจทย์"}</span>
+                            <ArrowRight className="w-3.5 h-3.5" />
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };

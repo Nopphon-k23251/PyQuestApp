@@ -47,6 +47,7 @@ class ProblemListItemResponse(BaseModel):
     is_published: bool
     is_solved: bool = False
     is_starred: bool = False
+    topic: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
 

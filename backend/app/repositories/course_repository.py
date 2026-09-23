@@ -30,7 +30,10 @@ class CourseRepository:
         if published_only:
             query = query.filter(Course.is_published == True)
         if difficulty:
-            query = query.filter(Course.difficulty == difficulty.value if hasattr(difficulty, 'value') else difficulty)
+            diff_val = difficulty.value if hasattr(difficulty, 'value') else difficulty
+            query = query.filter(
+                (Course.difficulty == diff_val) | (Course.slug == "python-fundamentals")
+            )
 
         total = query.count()
         courses = (

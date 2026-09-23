@@ -30,122 +30,45 @@ def seed_thai_problems(db=None):
     try:
         logger.info("Seeding / Updating Thai fundamental Python problems...")
 
-        # 1. Course definitions
-        course_definitions = [
-            {
-                "slug": "python-basics",
-                "legacy_slug": "python-fundamentals",
-                "title": "1. พื้นฐานและตัวแปร (Python Basics & Variables)",
-                "description": "ปูพื้นฐานการเขียนโปรแกรมด้วยภาษา Python: ตัวแปร, ชนิดข้อมูล (int, float, str, bool), การคำนวณทางคณิตศาสตร์, การรับค่า (input) และการแสดงผล (print)",
-                "difficulty": Difficulty.EASY.value,
-                "is_published": True,
-            },
-            {
-                "slug": "python-conditions",
-                "legacy_slug": "control-flow-and-logic",
-                "title": "2. เงื่อนไขและการตัดสินใจ (Conditions & Logic)",
-                "description": "ฝึกการคิดอย่างมีตรรกะด้วยคำสั่ง if, elif, else, ตัวดำเนินการเปรียบเทียบ (==, !=, >, <) และตัวดำเนินการตรรกะ (and, or, not)",
-                "difficulty": Difficulty.EASY.value,
-                "is_published": True,
-            },
-            {
-                "slug": "python-loops",
-                "legacy_slug": None,
-                "title": "3. การวนซ้ำและทำซ้ำ (Loops: For & While)",
-                "description": "ควบคุมการทำงานซ้ำๆ ด้วย for loop, while loop, ฟังก์ชัน range() รวมถึงคำสั่ง break และ continue เพื่อแก้ปัญหาอัลกอริทึม",
-                "difficulty": Difficulty.EASY.value,
-                "is_published": True,
-            },
-            {
-                "slug": "python-strings",
-                "legacy_slug": None,
-                "title": "4. ข้อความและสตริงเมธอด (Strings & String Methods)",
-                "description": "เทคนิคการจัดการข้อความ (String manipulation): การเข้าถึงตัวอักษร, Slicing [start:stop:step] และการใช้ String Methods (.split, .join, .replace, .strip, .lower, .upper)",
-                "difficulty": Difficulty.MEDIUM.value,
-                "is_published": True,
-            },
-            {
-                "slug": "python-lists",
-                "legacy_slug": "data-structures-in-python",
-                "title": "5. ลิสต์และลิสต์เมธอด (Lists & List Methods)",
-                "description": "โครงสร้างข้อมูล List: การสร้าง, ดัชนี, List Methods (.append, .insert, .pop, .remove, .sort, .reverse) และเทคนิคการประมวลผลข้อมูลในลิสต์",
-                "difficulty": Difficulty.MEDIUM.value,
-                "is_published": True,
-            },
-            {
-                "slug": "python-dicts",
-                "legacy_slug": None,
-                "title": "6. ดิกชันนารีและคู่ข้อมูล (Dictionaries & Dict Methods)",
-                "description": "การเก็บข้อมูลแบบ Key-Value ใน Dictionary: การเข้าถึง, การเพิ่ม/แก้ไข, Dict Methods (.keys, .values, .items, .get) และการนับความถี่ข้อมูล",
-                "difficulty": Difficulty.MEDIUM.value,
-                "is_published": True,
-            },
-            {
-                "slug": "python-functions",
-                "legacy_slug": None,
-                "title": "7. การสร้างและใช้งานฟังก์ชัน (Functions & Scope)",
-                "description": "การแยกโค้ดเป็นโมดูลย่อยด้วยคำสั่ง def, การส่งผ่านพารามิเตอร์, การคืนค่าด้วย return และการนำฟังก์ชันกลับมาใช้ใหม่ (Code Reusability)",
-                "difficulty": Difficulty.MEDIUM.value,
-                "is_published": True,
-            },
-            {
-                "slug": "python-recap",
-                "legacy_slug": None,
-                "title": "8. แบบฝึกหัดทบทวนและโจทย์ประยุกต์รวมมิตร (Comprehensive Recap)",
-                "description": "รวมโจทย์ท้าทายที่ต้องผสมผสานทักษะหลายด้าน: Condition + Loop + Data Structures + Functions เพื่อจำลองสถานการณ์จริง",
-                "difficulty": Difficulty.HARD.value,
-                "is_published": True,
-            },
-        ]
+        # 1. Unified Course definition (single consolidated course, no numbering prefix)
+        UNIFIED_SLUG = "python-fundamentals"
+        UNIFIED_TITLE = "แบบฝึกหัดเขียนโปรแกรมภาษา Python"
+        UNIFIED_DESC = "รวมแบบฝึกหัดเขียนโปรแกรมภาษา Python ครบทุกหัวข้อสำคัญ ตั้งแต่พื้นฐาน ตัวแปร เงื่อนไข การวนซ้ำ สตริง ลิสต์ ดิกชันนารี ฟังก์ชัน ไปจนถึงโจทย์ประยุกต์ เรียงลำดับจากง่ายไปยาก"
 
-        # Ensure all courses exist (migrate legacy slugs if present)
-        for cdef in course_definitions:
-            course = None
-            if cdef.get("legacy_slug"):
-                course = db.query(Course).filter(Course.slug == cdef["legacy_slug"]).first()
-            if not course:
-                course = db.query(Course).filter(Course.slug == cdef["slug"]).first()
+        unified_course = db.query(Course).filter(Course.slug == UNIFIED_SLUG).first()
+        if not unified_course:
+            unified_course = db.query(Course).filter(Course.slug == "python-basics").first()
 
-            if not course:
-                course = Course(
-                    slug=cdef["slug"],
-                    title=cdef["title"],
-                    description=cdef["description"],
-                    difficulty=cdef["difficulty"],
-                    is_published=cdef["is_published"],
-                )
-                db.add(course)
-                db.flush()
-            else:
-                course.slug = cdef["slug"]
-                course.title = cdef["title"]
-                course.description = cdef["description"]
-                course.difficulty = cdef["difficulty"]
-                course.is_published = cdef["is_published"]
-                db.flush()
+        if not unified_course:
+            unified_course = Course(
+                slug=UNIFIED_SLUG,
+                title=UNIFIED_TITLE,
+                description=UNIFIED_DESC,
+                difficulty=Difficulty.EASY.value,
+                is_published=True,
+            )
+            db.add(unified_course)
+            db.flush()
+        else:
+            unified_course.slug = UNIFIED_SLUG
+            unified_course.title = UNIFIED_TITLE
+            unified_course.description = UNIFIED_DESC
+            unified_course.difficulty = Difficulty.EASY.value
+            unified_course.is_published = True
+            db.flush()
 
         db.commit()
 
-        # Helper function to upsert problem & test cases
+        # Helper function to upsert problem & test cases under unified course
         def upsert_problem(course_slug: str, prob_data: dict, test_cases_data: list):
-            course = db.query(Course).filter(Course.slug == course_slug).first()
-            if not course:
-                for cdef in course_definitions:
-                    if cdef["slug"] == course_slug and cdef.get("legacy_slug"):
-                        course = db.query(Course).filter(Course.slug == cdef["legacy_slug"]).first()
-                        break
-            if not course:
-                logger.warning(f"Course {course_slug} not found!")
-                return
-
             prob = db.query(Problem).filter(Problem.slug == prob_data["slug"]).first()
             if not prob:
-                prob = Problem(course_id=course.id, **prob_data)
+                prob = Problem(course_id=unified_course.id, **prob_data)
                 db.add(prob)
                 db.flush()
                 logger.info(f"Created new problem: {prob.title}")
             else:
-                prob.course_id = course.id
+                prob.course_id = unified_course.id
                 for k, v in prob_data.items():
                     setattr(prob, k, v)
                 db.flush()
@@ -1021,7 +944,11 @@ def seed_thai_problems(db=None):
             ],
         )
 
-        logger.info("Successfully finished seeding comprehensive Thai fundamental Python problems across all 8 modules!")
+        # Remove any other split courses so only the single unified course remains
+        db.query(Course).filter(Course.id != unified_course.id).delete(synchronize_session=False)
+        db.commit()
+
+        logger.info("Successfully finished seeding comprehensive Thai fundamental Python problems under single unified course!")
     except Exception as e:
         db.rollback()
         logger.error(f"Error during Thai problems seeding: {e}")

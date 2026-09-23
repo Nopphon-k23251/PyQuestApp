@@ -127,23 +127,21 @@ if __name__ == '__main__':
 
 def test_all_eight_modules_seeded(client, db_session):
     seed_thai_problems(db=db_session)
-    courses = db_session.query(Course).all()
-    assert len(courses) >= 8
+    unified = db_session.query(Course).filter(Course.slug == "python-fundamentals").first()
+    assert unified is not None
+    assert "แบบฝึกหัดเขียนโปรแกรมภาษา Python" in unified.title
 
-    expected_slugs = [
-        "python-basics",
-        "python-conditions",
-        "python-loops",
-        "python-strings",
-        "python-lists",
-        "python-dicts",
-        "python-functions",
-        "python-recap",
-    ]
-    course_slugs = [c.slug for c in courses]
-    for es in expected_slugs:
-        assert es in course_slugs
-
-    # Verify problem count across all modules
-    problems = db_session.query(Problem).all()
+    # Verify problem count across all modules under this single course
+    problems = db_session.query(Problem).filter(Problem.course_id == unified.id).all()
     assert len(problems) >= 30
+
+    # Verify API get_course returns problems in ordered sequence with topics
+    res = client.get(f"/api/courses/{unified.id}")
+    assert res.status_code == 200
+    course_data = res.json()["data"]
+    res_probs = course_data["problems"]
+    assert len(res_probs) >= 30
+    assert res_probs[0]["slug"] == "calculate-sum"
+    assert res_probs[0]["topic"] == "พื้นฐานและตัวแปร"
+    assert res_probs[-1]["slug"] == "student-ranking"
+    assert res_probs[-1]["topic"] == "แบบฝึกหัดทบทวนและโจทย์ประยุกต์"
