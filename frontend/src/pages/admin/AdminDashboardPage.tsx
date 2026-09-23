@@ -63,13 +63,16 @@ export const AdminDashboardPage: React.FC = () => {
     time_limit_ms: 1000,
     memory_limit_mb: 128,
     is_published: false,
+    sample_input: "",
+    sample_output: "",
   });
 
   const [tcModalOpen, setTcModalOpen] = useState(false);
+  const [editingTc, setEditingTc] = useState<TestCase | null>(null);
   const [tcForm, setTcForm] = useState({
     input_data: "",
     expected_output: "",
-    is_hidden: true,
+    is_hidden: false,
     points: 5,
   });
 
@@ -172,6 +175,8 @@ export const AdminDashboardPage: React.FC = () => {
         time_limit_ms: problem.timeLimitMs,
         memory_limit_mb: problem.memoryLimitMb,
         is_published: problem.isPublished,
+        sample_input: "",
+        sample_output: "",
       });
     } else {
       setEditingProblem(null);
@@ -188,6 +193,8 @@ export const AdminDashboardPage: React.FC = () => {
         time_limit_ms: 1000,
         memory_limit_mb: 128,
         is_published: false,
+        sample_input: "",
+        sample_output: "",
       });
     }
     setProblemModalOpen(true);
@@ -196,10 +203,24 @@ export const AdminDashboardPage: React.FC = () => {
   const handleSaveProblem = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const { sample_input, sample_output, ...payload } = problemForm;
       if (editingProblem) {
-        await adminApi.updateProblem(editingProblem.id, problemForm);
+        await adminApi.updateProblem(editingProblem.id, payload);
       } else {
-        await adminApi.createProblem(problemForm);
+        const created = await adminApi.createProblem(payload);
+        // If sample input or expected output was provided, auto-create the sample testcase!
+        if (created?.id && (sample_input || sample_output)) {
+          try {
+            await adminApi.createTestCase(created.id, {
+              input_data: sample_input || "",
+              expected_output: sample_output || "",
+              is_hidden: false,
+              points: 5,
+            });
+          } catch (tcErr) {
+            console.warn("Failed to auto-create sample testcase:", tcErr);
+          }
+        }
       }
       setProblemModalOpen(false);
       loadAllAdminData();
@@ -230,13 +251,53 @@ export const AdminDashboardPage: React.FC = () => {
     }
   };
 
+  const handleToggleTcVisibility = async (tc: TestCase) => {
+    try {
+      const newHiddenState = !tc.isHidden;
+      await adminApi.updateTestCase(tc.id, { is_hidden: newHiddenState });
+      if (selectedProblemId) {
+        const updated = await adminApi.getTestCases(selectedProblemId);
+        setTestCases(updated);
+      }
+    } catch (err: any) {
+      alert(err.message || "Failed to update test case visibility");
+    }
+  };
+
+  const handleOpenAddTcModal = () => {
+    setEditingTc(null);
+    setTcForm({
+      input_data: "",
+      expected_output: "",
+      is_hidden: false, // Default to Sample (ตัวอย่าง)
+      points: 5,
+    });
+    setTcModalOpen(true);
+  };
+
+  const handleOpenEditTcModal = (tc: TestCase) => {
+    setEditingTc(tc);
+    setTcForm({
+      input_data: tc.inputData || (tc as any).input_data || "",
+      expected_output: tc.expectedOutput || (tc as any).expected_output || "",
+      is_hidden: tc.isHidden ?? false,
+      points: tc.points ?? 5,
+    });
+    setTcModalOpen(true);
+  };
+
   const handleSaveTestCase = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedProblemId) return;
     try {
-      await adminApi.createTestCase(selectedProblemId, tcForm);
+      if (editingTc) {
+        await adminApi.updateTestCase(editingTc.id, tcForm);
+      } else {
+        await adminApi.createTestCase(selectedProblemId, tcForm);
+      }
       setTcModalOpen(false);
-      setTcForm({ input_data: "", expected_output: "", is_hidden: true, points: 5 });
+      setEditingTc(null);
+      setTcForm({ input_data: "", expected_output: "", is_hidden: false, points: 5 });
       const updated = await adminApi.getTestCases(selectedProblemId);
       setTestCases(updated);
     } catch (err: any) {
@@ -296,6 +357,18 @@ export const AdminDashboardPage: React.FC = () => {
           >
             โจทย์ (Problems)
           </button>
+          {selectedProblemId && (
+            <button
+              onClick={() => setActiveTab("testcases")}
+              className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
+                activeTab === "testcases"
+                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                  : "text-slate-400 hover:text-white"
+              }`}
+            >
+              Test Cases (#{selectedProblemId})
+            </button>
+          )}
           <button
             onClick={() => setActiveTab("submissions")}
             className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition-all ${
@@ -484,7 +557,7 @@ export const AdminDashboardPage: React.FC = () => {
             </div>
 
             <button
-              onClick={() => setTcModalOpen(true)}
+              onClick={handleOpenAddTcModal}
               className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/30 transition-all"
             >
               <Plus className="w-4 h-4" />
@@ -506,29 +579,49 @@ export const AdminDashboardPage: React.FC = () => {
                         <span className="text-xs font-bold text-white">
                           Test Case #{idx + 1}
                         </span>
-                        {tc.isHidden ? (
-                          <span className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">
-                            <EyeOff className="w-3 h-3" />
-                            Hidden (ซ่อนไว้สำหรับตรวจ)
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1 text-[11px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                            <Eye className="w-3 h-3" />
-                            Sample (แสดงเป็นตัวอย่าง)
-                          </span>
-                        )}
+                        <button
+                          type="button"
+                          onClick={() => handleToggleTcVisibility(tc)}
+                          className={`flex items-center gap-1.5 text-[11px] px-2.5 py-0.5 rounded-md border font-medium transition-all ${
+                            tc.isHidden
+                              ? "bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20"
+                              : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20"
+                          }`}
+                          title="คลิกเพื่อสลับระหว่าง Sample (แสดงในโจทย์) กับ Hidden (ซ่อน)"
+                        >
+                          {tc.isHidden ? (
+                            <>
+                              <EyeOff className="w-3 h-3" />
+                              <span>Hidden (ซ่อน) ⇄ คลิกเพื่อเปลี่ยนเป็น Sample</span>
+                            </>
+                          ) : (
+                            <>
+                              <Eye className="w-3 h-3" />
+                              <span>Sample (ตัวอย่างในโจทย์) ⇄ คลิกเพื่อซ่อน</span>
+                            </>
+                          )}
+                        </button>
                         <span className="text-xs text-slate-400">
                           ({tc.points} pts)
                         </span>
                       </div>
 
-                      <button
-                        onClick={() => handleDeleteTestCase(tc.id)}
-                        className="text-slate-400 hover:text-rose-400 p-1"
-                        title="ลบ Test Case"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex items-center space-x-1">
+                        <button
+                          onClick={() => handleOpenEditTcModal(tc)}
+                          className="text-slate-400 hover:text-white hover:bg-slate-800 p-1.5 rounded-lg transition-colors"
+                          title="แก้ไข Test Case"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteTestCase(tc.id)}
+                          className="text-slate-400 hover:text-rose-400 hover:bg-rose-500/10 p-1.5 rounded-lg transition-colors"
+                          title="ลบ Test Case"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3 text-xs font-mono">
@@ -806,6 +899,40 @@ export const AdminDashboardPage: React.FC = () => {
                 </div>
               </div>
 
+              {!editingProblem && (
+                <div className="p-4 rounded-xl bg-slate-900/80 border border-indigo-500/20 space-y-3 font-sans">
+                  <div className="flex items-center gap-2 text-indigo-400 font-bold text-xs">
+                    <Sparkles className="w-4 h-4" />
+                    <span>ชุดข้อมูลตัวอย่างเริ่มต้น (Sample Test Case - แสดงให้ผู้เรียนเห็นทันที)</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 text-xs font-mono">
+                    <div>
+                      <label className="block text-slate-300 mb-1 font-sans font-medium">Sample Input:</label>
+                      <textarea
+                        rows={2}
+                        value={problemForm.sample_input}
+                        onChange={(e) => setProblemForm({ ...problemForm, sample_input: e.target.value })}
+                        placeholder="เช่น: 5 7"
+                        className="w-full p-2 rounded-lg bg-slate-950 border border-slate-800 text-emerald-300"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-slate-300 mb-1 font-sans font-medium">Sample Expected Output:</label>
+                      <textarea
+                        rows={2}
+                        value={problemForm.sample_output}
+                        onChange={(e) => setProblemForm({ ...problemForm, sample_output: e.target.value })}
+                        placeholder="เช่น: 12"
+                        className="w-full p-2 rounded-lg bg-slate-950 border border-slate-800 text-indigo-300"
+                      />
+                    </div>
+                  </div>
+                  <p className="text-[11px] text-slate-400 font-sans">
+                    * ระบบจะสร้างเป็น Test Case ตัวอย่าง (Sample) ให้อัตโนมัติ โดยจะแสดงในแท็บ "ชุดข้อมูลตัวอย่าง" ในหน้าโจทย์
+                  </p>
+                </div>
+              )}
+
               <div className="flex items-center space-x-2 pt-2">
                 <input
                   type="checkbox"
@@ -839,28 +966,65 @@ export const AdminDashboardPage: React.FC = () => {
         </div>
       )}
 
-      {/* Add Test Case Modal */}
+      {/* Add / Edit Test Case Modal */}
       {tcModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
           <div className="w-full max-w-lg p-6 rounded-2xl glass-panel bg-[#0d121f] border border-white/10 space-y-4">
             <h3 className="text-lg font-bold text-white">
-              เพิ่ม Test Case สำหรับโจทย์ #{selectedProblemId}
+              {editingTc ? "แก้ไข Test Case" : "เพิ่ม Test Case"} สำหรับโจทย์ #{selectedProblemId}
             </h3>
 
-            <form onSubmit={handleSaveTestCase} className="space-y-3 text-xs font-mono">
+            <form onSubmit={handleSaveTestCase} className="space-y-4 text-xs font-mono">
+              <div className="space-y-2 font-sans">
+                <label className="block text-slate-300 font-semibold">ประเภท Test Case:</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setTcForm({ ...tcForm, is_hidden: false })}
+                    className={`p-3 rounded-xl border text-left flex items-start gap-2.5 transition-all ${
+                      !tcForm.is_hidden
+                        ? "bg-emerald-500/15 border-emerald-500/50 text-white shadow-md shadow-emerald-500/10"
+                        : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    <Eye className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-bold text-xs text-emerald-300">ตัวอย่าง (Sample)</div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">แสดงตัวอย่างให้ผู้เรียนเห็นในหน้าโจทย์</div>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setTcForm({ ...tcForm, is_hidden: true })}
+                    className={`p-3 rounded-xl border text-left flex items-start gap-2.5 transition-all ${
+                      tcForm.is_hidden
+                        ? "bg-amber-500/15 border-amber-500/50 text-white shadow-md shadow-amber-500/10"
+                        : "bg-slate-900 border-slate-800 text-slate-400 hover:text-white"
+                    }`}
+                  >
+                    <EyeOff className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-bold text-xs text-amber-300">ซ่อนไว้ (Hidden)</div>
+                      <div className="text-[11px] text-slate-400 mt-0.5">ใช้ตรวจคำตอบตอน Submit เท่านั้น</div>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-slate-300 mb-1 font-sans font-semibold">Input Data:</label>
                 <textarea
                   rows={3}
                   value={tcForm.input_data}
                   onChange={(e) => setTcForm({ ...tcForm, input_data: e.target.value })}
-                  placeholder="เช่น: 10 20"
+                  placeholder="เช่น: 10 20 (เว้นว่างไว้ได้หากโจทย์ไม่มี input)"
                   className="w-full p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-emerald-300"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 mb-1 font-sans font-semibold">Expected Output:</label>
+                <label className="block text-slate-300 mb-1 font-sans font-semibold">Expected Output (ผลลัพธ์ที่ถูกต้อง):</label>
                 <textarea
                   required
                   rows={3}
@@ -871,32 +1035,24 @@ export const AdminDashboardPage: React.FC = () => {
                 />
               </div>
 
-              <div className="flex items-center space-x-4 pt-2 font-sans">
-                <label className="flex items-center space-x-2">
-                  <input
-                    type="checkbox"
-                    checked={tcForm.is_hidden}
-                    onChange={(e) => setTcForm({ ...tcForm, is_hidden: e.target.checked })}
-                    className="rounded bg-slate-900 border-slate-800 text-indigo-600 focus:ring-0"
-                  />
-                  <span className="text-slate-300">ซ่อนไว้ (Hidden Test Case)</span>
-                </label>
-
-                <div className="flex items-center space-x-1.5">
-                  <span className="text-slate-400">Points:</span>
-                  <input
-                    type="number"
-                    value={tcForm.points}
-                    onChange={(e) => setTcForm({ ...tcForm, points: parseInt(e.target.value) })}
-                    className="w-16 p-1 rounded bg-slate-900 border border-slate-800 text-white"
-                  />
-                </div>
+              <div className="flex items-center space-x-2 pt-1 font-sans">
+                <span className="text-slate-400 font-semibold">คะแนน (Points):</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={tcForm.points}
+                  onChange={(e) => setTcForm({ ...tcForm, points: parseInt(e.target.value) || 1 })}
+                  className="w-20 p-2 rounded-lg bg-slate-900 border border-slate-800 text-white text-center font-bold"
+                />
               </div>
 
               <div className="flex items-center justify-end space-x-2 pt-4 border-t border-slate-800 font-sans">
                 <button
                   type="button"
-                  onClick={() => setTcModalOpen(false)}
+                  onClick={() => {
+                    setTcModalOpen(false);
+                    setEditingTc(null);
+                  }}
                   className="px-4 py-2 text-slate-400 hover:text-white"
                 >
                   ยกเลิก
@@ -905,7 +1061,7 @@ export const AdminDashboardPage: React.FC = () => {
                   type="submit"
                   className="px-4 py-2 rounded-xl bg-indigo-600 text-white font-semibold"
                 >
-                  บันทึก Test Case
+                  {editingTc ? "อัปเดต Test Case" : "บันทึก Test Case"}
                 </button>
               </div>
             </form>

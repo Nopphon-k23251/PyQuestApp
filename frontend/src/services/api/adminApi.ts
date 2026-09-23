@@ -51,11 +51,11 @@ export const adminApi = {
     return api.get<TestCase[]>(`/admin/problems/${problemId}/test-cases`);
   },
 
-  createTestCase: (problemId: number, data: Partial<TestCase>) => {
+  createTestCase: (problemId: number, data: any) => {
     return api.post<TestCase>(`/admin/problems/${problemId}/test-cases`, data);
   },
 
-  updateTestCase: (testCaseId: number, data: Partial<TestCase>) => {
+  updateTestCase: (testCaseId: number, data: any) => {
     return api.patch<TestCase>(`/admin/test-cases/${testCaseId}`, data);
   },
 
