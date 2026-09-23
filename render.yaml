@@ -1,0 +1,18 @@
+services:
+  - type: web
+    name: pyquest-backend
+    runtime: python
+    region: singapore
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: CORS_ORIGINS
+        value: "*"
+      - key: FIREBASE_PROJECT_ID
+        value: nopphonapp-d0c5b
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
