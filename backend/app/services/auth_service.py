@@ -42,10 +42,22 @@ class AuthService:
 
         role = UserRole.ADMIN.value if is_admin_email else UserRole.USER.value
 
-        return self.user_repo.create(
-            firebase_uid=firebase_uid,
-            username=final_username,
-            email=email or f"{final_username}@example.com",
-            role=role,
-        )
+        try:
+            return self.user_repo.create(
+                firebase_uid=firebase_uid,
+                username=final_username,
+                email=email or f"{final_username}@example.com",
+                role=role,
+            )
+        except Exception:
+            self.db.rollback()
+            existing = self.user_repo.get_by_firebase_uid(firebase_uid)
+            if not existing and email:
+                existing = self.user_repo.get_by_email(email)
+            if existing:
+                if is_admin_email and existing.role != UserRole.ADMIN.value:
+                    existing.role = UserRole.ADMIN.value
+                    self.user_repo.update(existing)
+                return existing
+            raise
 

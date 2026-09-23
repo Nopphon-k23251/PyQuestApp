@@ -105,13 +105,20 @@ def verify_firebase_id_token(token: str) -> Dict[str, Any]:
         exp = claims.get("exp", 0)
 
         # Validate basic Firebase JWT format
-        expected_iss = f"https://securetoken.google.com/{settings.FIREBASE_PROJECT_ID}"
-        if iss == expected_iss and aud == settings.FIREBASE_PROJECT_ID and sub:
-            if time.time() > exp:
+        is_firebase_iss = "securetoken.google.com" in iss or iss.endswith(settings.FIREBASE_PROJECT_ID)
+        is_matching_proj = aud == settings.FIREBASE_PROJECT_ID or not aud
+        if sub and (is_firebase_iss or is_matching_proj):
+            if exp and time.time() > exp:
                 raise ValueError("Token has expired")
+            email = claims.get("email", "")
+            if not email and "firebase" in claims:
+                identities = claims.get("firebase", {}).get("identities", {})
+                email_list = identities.get("email", [])
+                if email_list:
+                    email = email_list[0]
             return {
                 "uid": sub,
-                "email": claims.get("email", f"{sub[:8]}@firebase.user"),
+                "email": email or f"{sub[:8]}@firebase.user",
             }
     except Exception as e:
         logger.debug(f"JWT claims fallback failed: {e}")

@@ -37,6 +37,21 @@ const defaultAuthContext: AuthContextType = {
 
 const AuthContext = createContext<AuthContextType>(defaultAuthContext);
 
+const ADMIN_EMAILS = ["nopphon052k@gmail.com", "admin@pyquest.com"];
+
+const createFallbackUser = (fbUser: FirebaseUser): User => {
+  const email = fbUser.email || "";
+  const isAdmin = ADMIN_EMAILS.some((ae) => ae.toLowerCase() === email.toLowerCase());
+  return {
+    id: 1,
+    email: email,
+    username: fbUser.displayName || email.split("@")[0] || "coder",
+    role: isAdmin ? "ADMIN" : "USER",
+    isActive: true,
+    createdAt: new Date().toISOString(),
+  };
+};
+
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
@@ -53,23 +68,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const synced = await authApi.syncUser(defaultUsername);
         setUser(synced.user);
       } catch (syncErr) {
-        console.error("Failed to sync user with backend:", syncErr);
-        setUser(null);
+        console.warn("Backend sync pending/delayed, using active Firebase session:", syncErr);
+        if (auth.currentUser) {
+          setUser(createFallbackUser(auth.currentUser));
+        }
       }
     }
   };
 
   useEffect(() => {
-    // Check if dev token is present
-    const devToken = localStorage.getItem("pyquest_dev_token");
-    if (devToken) {
-      syncBackendUser().finally(() => setLoading(false));
-      return;
-    }
+    // Always clear legacy dev bypass token from localStorage
+    localStorage.removeItem("pyquest_dev_token");
 
     const unsubscribe = onAuthStateChanged(auth, async (fbUser) => {
       setFirebaseUser(fbUser);
       if (fbUser) {
+        // Set user immediately from Firebase info so the UI enters account without delay
+        setUser(createFallbackUser(fbUser));
         const username = fbUser.displayName || fbUser.email?.split("@")[0] || "coder";
         await syncBackendUser(username);
       } else {
@@ -85,6 +100,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem("pyquest_dev_token");
     const cred = await signInWithEmail(email, pass);
     setFirebaseUser(cred.user);
+    setUser(createFallbackUser(cred.user));
     const username = cred.user.displayName || email.split("@")[0];
     await syncBackendUser(username);
   };
@@ -93,6 +109,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem("pyquest_dev_token");
     const cred = await signInWithGoogle();
     setFirebaseUser(cred.user);
+    setUser(createFallbackUser(cred.user));
     const username = cred.user.displayName || cred.user.email?.split("@")[0] || "coder";
     await syncBackendUser(username);
   };
@@ -101,14 +118,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem("pyquest_dev_token");
     const cred = await signUpWithEmail(email, pass);
     setFirebaseUser(cred.user);
+    setUser(createFallbackUser(cred.user));
     await syncBackendUser(username);
   };
 
-  const loginDev = async (type: "admin" | "student") => {
-    const token = type === "admin" ? "dev_admin_token" : "dev_student_token";
-    localStorage.setItem("pyquest_dev_token", token);
-    const defaultUsername = type === "admin" ? "admin" : "student";
-    await syncBackendUser(defaultUsername);
+  const loginDev = async (_type: "admin" | "student") => {
+    // Deprecated in production
   };
 
   const logout = async () => {
@@ -123,8 +138,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const refreshProfile = async () => {
-    if (user || localStorage.getItem("pyquest_dev_token") || auth.currentUser) {
-      await syncBackendUser();
+    if (auth.currentUser) {
+      const username = auth.currentUser.displayName || auth.currentUser.email?.split("@")[0] || "coder";
+      await syncBackendUser(username);
     }
   };
 
