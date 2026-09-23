@@ -4,6 +4,7 @@ import {
   onAuthStateChanged,
   signInWithEmail,
   signUpWithEmail,
+  signInWithGoogle,
   signOutUser,
   FirebaseUser,
 } from "../../services/firebase";
@@ -15,6 +16,7 @@ interface AuthContextType {
   firebaseUser: FirebaseUser | null;
   loading: boolean;
   login: (email: string, pass: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   register: (email: string, pass: string, username: string) => Promise<void>;
   loginDev: (type: "admin" | "student") => Promise<void>;
   logout: () => Promise<void>;
@@ -26,6 +28,7 @@ const defaultAuthContext: AuthContextType = {
   firebaseUser: null,
   loading: true,
   login: async () => {},
+  loginWithGoogle: async () => {},
   register: async () => {},
   loginDev: async () => {},
   logout: async () => {},
@@ -86,6 +89,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await syncBackendUser(username);
   };
 
+  const loginWithGoogle = async () => {
+    localStorage.removeItem("pyquest_dev_token");
+    const cred = await signInWithGoogle();
+    setFirebaseUser(cred.user);
+    const username = cred.user.displayName || cred.user.email?.split("@")[0] || "coder";
+    await syncBackendUser(username);
+  };
+
   const register = async (email: string, pass: string, username: string) => {
     localStorage.removeItem("pyquest_dev_token");
     const cred = await signUpWithEmail(email, pass);
@@ -124,6 +135,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         firebaseUser,
         loading,
         login,
+        loginWithGoogle,
         register,
         loginDev,
         logout,

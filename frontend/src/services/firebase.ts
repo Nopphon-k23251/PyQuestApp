@@ -6,6 +6,8 @@ import {
   signOut,
   onAuthStateChanged,
   User as FirebaseUser,
+  GoogleAuthProvider,
+  signInWithPopup,
 } from "firebase/auth";
 
 // Exact configuration provided by user
@@ -21,6 +23,7 @@ const firebaseConfig = {
 
 export const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
+export const googleProvider = new GoogleAuthProvider();
 
 export const signUpWithEmail = (email: string, pass: string) => {
   return createUserWithEmailAndPassword(auth, email, pass);
@@ -28,6 +31,10 @@ export const signUpWithEmail = (email: string, pass: string) => {
 
 export const signInWithEmail = (email: string, pass: string) => {
   return signInWithEmailAndPassword(auth, email, pass);
+};
+
+export const signInWithGoogle = () => {
+  return signInWithPopup(auth, googleProvider);
 };
 
 export const signOutUser = () => {

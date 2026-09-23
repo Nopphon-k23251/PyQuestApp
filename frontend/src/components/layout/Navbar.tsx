@@ -15,7 +15,7 @@ import { progressApi } from "../../services/api/progressApi";
 import { UserProgress } from "../../types";
 
 export const Navbar: React.FC = () => {
-  const { user, logout, loginDev } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [progress, setProgress] = useState<UserProgress | null>(null);
@@ -157,23 +157,6 @@ export const Navbar: React.FC = () => {
             </>
           ) : (
             <div className="flex items-center space-x-2">
-              {/* Quick Dev Switcher */}
-              <div className="hidden lg:flex items-center space-x-1.5 px-2 py-1 rounded-lg bg-slate-900/60 border border-slate-800 text-xs">
-                <span className="text-slate-500 text-[11px]">Dev:</span>
-                <button
-                  onClick={() => loginDev("student")}
-                  className="px-2 py-0.5 rounded text-[11px] bg-slate-800 hover:bg-indigo-600 text-slate-300 hover:text-white transition-colors"
-                >
-                  Student
-                </button>
-                <button
-                  onClick={() => loginDev("admin")}
-                  className="px-2 py-0.5 rounded text-[11px] bg-slate-800 hover:bg-rose-600 text-slate-300 hover:text-white transition-colors"
-                >
-                  Admin
-                </button>
-              </div>
-
               <Link
                 to="/login"
                 className="px-3.5 py-1.5 rounded-lg text-sm font-medium text-slate-300 hover:text-white hover:bg-slate-800/60 transition-colors"

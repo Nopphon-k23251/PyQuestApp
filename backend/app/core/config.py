@@ -61,8 +61,8 @@ class Settings(BaseSettings):
     FIREBASE_CLIENT_EMAIL: str = ""
     FIREBASE_PRIVATE_KEY: str = ""
     
-    # Dev auth bypass: Allows mock/dev token verification during local testing/dev
-    DEV_AUTH_BYPASS: bool = True
+    # Dev auth bypass: set to False in production
+    DEV_AUTH_BYPASS: bool = False
 
     # Judge & Sandbox Execution
     JUDGE_TIMEOUT_MS: int = 2000
@@ -70,7 +70,20 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE_BYTES: int = 1024 * 1024  # 1 MB
 
     # Admin Email bootstrap list
-    ADMIN_EMAILS: List[str] = ["admin@pyquest.com"]
+    ADMIN_EMAILS: List[str] = [
+        "nopphon052k@gmail.com",
+        "admin@pyquest.com",
+    ]
+
+    @field_validator("ADMIN_EMAILS", mode="before")
+    @classmethod
+    def assemble_admin_emails(cls, v: Union[str, List[str]]) -> List[str]:
+        if isinstance(v, str):
+            if v.startswith("[") and v.endswith("]"):
+                import json
+                return json.loads(v)
+            return [i.strip() for i in v.split(",") if i.strip()]
+        return v
 
     model_config = SettingsConfigDict(
         env_file=".env",
